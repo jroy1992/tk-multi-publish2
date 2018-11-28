@@ -239,7 +239,7 @@ class FileCollectorPlugin(HookBaseClass):
         item.properties.fields = self._resolve_item_fields(settings, item)
 
 
-    def __get_work_path_template_from_settings(self, settings, item_type, path):
+    def _get_work_path_template_from_settings(self, settings, item_type, path):
         """
         Helper method to get the work_path_template from the collector settings object.
         """
@@ -283,7 +283,7 @@ class FileCollectorPlugin(HookBaseClass):
         if not path:
             return None
 
-        return self.__get_work_path_template_from_settings(settings, item.type, path)
+        return self._get_work_path_template_from_settings(settings, item.type, path)
 
 
     def _get_item_context_from_path(self, work_path_template, path, parent_item, default_entities=list()):
@@ -481,7 +481,7 @@ class FileCollectorPlugin(HookBaseClass):
 
         if not context:
             # See if we can get a resolved work_path_template from the settings object
-            work_path_template = self.__get_work_path_template_from_settings(settings, item_type, path)
+            work_path_template = self._get_work_path_template_from_settings(settings, item_type, path)
             if work_path_template:
                 # If defined, attempt to use it and the input path to get the item's initial context
                 context = self._get_item_context_from_path(work_path_template, path, parent_item)
