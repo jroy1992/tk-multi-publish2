@@ -184,7 +184,7 @@ class FileCollectorPlugin(HookBaseClass):
                 "work_path_template": {
                     "type": "template",
                     "description": "",
-                    "fields": ["context", "*"],
+                    "fields": "context, *",
                     "allows_empty": True,
                 },
             }

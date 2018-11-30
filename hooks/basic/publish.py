@@ -145,25 +145,25 @@ class PublishPlugin(HookBaseClass):
             "publish_name_template": {
                 "type": "template",
                 "description": "",
-                "fields": ["context", "version", "[output]", "[name]", "*"],
+                "fields": "context, version, [output], [name], *",
                 "allows_empty": True,
             },
             "publish_path_template": {
                 "type": "template",
                 "description": "",
-                "fields": ["context", "*"],
+                "fields": "context, *",
                 "allows_empty": True,
             },
             "publish_symlink_template": {
                 "type": "template",
                 "description": "",
-                "fields": ["context", "*"],
+                "fields": "context, *",
                 "allows_empty": True,
             },
             "publish_linked_entity_name_template": {
                 "type": "template",
                 "description": "",
-                "fields": ["context", "version", "[output]", "[name]", "*"],
+                "fields": "context, version, [output], [name], *",
                 "allows_empty": True,
             },
             "additional_publish_fields": {

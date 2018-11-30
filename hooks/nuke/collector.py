@@ -78,7 +78,7 @@ class NukeSessionCollector(HookBaseClass):
             "values": {
                 "type": "template",
                 "description": "",
-                "fields": ["context", "*"]
+                "fields": "context, *"
             },
             "default_value": [],
             "allows_empty": True,
