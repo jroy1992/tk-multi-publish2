@@ -15,13 +15,25 @@ from ..data import PublishData
 
 logger = sgtk.platform.get_logger(__name__)
 
-class PluginSetting(PublishData):
+def create_plugin_setting(name, value, schema):
+    """
+    """
+    schema = schema or {}
+    setting_type = schema.get("type")
+    if setting_type == "list":
+        return ListPluginSetting(name, value, schema)
+    elif setting_type == "dict":
+        return DictPluginSetting(name, value, schema)
+    else:
+        return PluginSetting(name, value, schema)
+
+class PluginSetting(object):
     """
     This class provides an interface to settings defined for a given
     :ref:`publish-api-task`.
     """
 
-    def __init__(self, name, data_type, default_value, description=None):
+    def __init__(self, name, value, schema):
         """
         This class derives from :ref:`publish-api-data`.  A few special keys
         are set by default and are accessible after initialization. Those keys
@@ -38,21 +50,160 @@ class PluginSetting(PublishData):
             configured ``PluginSettings``.
         """
 
-        super(PluginSetting, self).__init__()
+        self._name = name
+        self._schema = schema or {}
+        self._value = value
+        self._type = self._schema.get("type")
+        self._default_value = self._schema.get("default_value")
+        self._description = self._schema.get("description")
 
-        self.default_value = default_value
-        self.description = description
-        self.name = name
-        self.type = data_type
-        self.value = default_value
+        # Process the children
+        self._process_children()
+
+    def _process_children(self):
+        """
+        Process an update to this setting's value
+        """
+        pass
+
+    def __repr__(self):
+        return "<%s %s: %s>" % (self.__class__.__name__, self._name, self._value)
+
+    def __str__(self):
+        return str(self._value)
+
+    def __eq__(self, other):
+        if other is self:
+            return True
+        if other is None:
+            return False
+        if isinstance(other, PluginSetting):
+            return self._value == other._value
+        return self._value == other
+
+    def __contains__(self, key):
+        return key in self._value
+
+    @property
+    def name(self):
+        """
+        The setting name
+        """
+        return self._name
+
+    @property
+    def value(self):
+        """
+        The current value of the setting
+        """
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        """
+        The the value of the PluginSetting
+        """
+        if value != self._value:
+            # TODO: Validate the value first
+            self._value = value
+            self._process_children()
 
     @property
     def string_value(self):
-        """The setting value as a string."""
-        return str(self.value)
+        """
+        The setting value, as a string
+        """
+        return str(self)
+
+    @property
+    def description(self):
+        """
+        The description of the setting
+        """
+        return self._description
+
+    @property
+    def default_value(self):
+        """
+        The default value of the setting.
+        """
+        return self._default_value
+
+    @property
+    def type(self):
+        """
+        The data type of the setting.
+        """
+        return self._type
 
 
-def get_plugin_setting(settings_key, context=None, plugin_schema={}, validate=False):
+class ListPluginSetting(PluginSetting, collections.Sequence):
+    """
+    """
+    def __init__(self, name, value, schema):
+        """
+        """
+        collections.Sequence.__init__(self)
+        PluginSetting.__init__(self, name, value, schema)
+
+    def _process_children(self):
+        """
+        Process an update to this setting's children
+        """
+        self._children = []
+        value_schema = self._schema.get("values", {})
+        for i, sub_value in enumerate(self._value):
+            value_name = "%s[%s]" % (self._name, str(i))
+            self._children.append(create_plugin_setting(value_name, sub_value, value_schema))
+
+    def __getitem__(self, key):
+        return self._children[key]
+
+    def __len__(self):
+        return len(self._children)
+
+
+class DictPluginSetting(PluginSetting, collections.Mapping):
+    """
+    """
+    def __init__(self, name, value, schema):
+        """
+        """
+        collections.Mapping.__init__(self)
+        PluginSetting.__init__(self, name, value, schema)
+
+    def _process_children(self):
+        """
+        Process an update to this setting's children
+        """
+        self._children = {}
+
+        # If there is an item list, then we are dealing with a strict definition
+        items = self._schema.get("items")
+        if items:
+            for sub_key, value_schema in items.iteritems():
+                value_name = "%s[\"%s\"]" % (self._name, sub_key)
+                sub_value = self._value[sub_key]
+                self._children[sub_key] = create_plugin_setting(value_name, sub_value, value_schema)
+
+        # Else just process the user-defined items
+        else:
+            value_schema = self._schema.get("values", {})
+            for sub_key, sub_value in self._value.iteritems():
+                value_name = "%s.%s" % (self._name, sub_key)
+                self._children[sub_key] = create_plugin_setting(value_name, sub_value, value_schema)
+
+    def __getitem__(self, key):
+        return self._children[key]
+
+    def __iter__(self):
+        return iter(self._children)
+
+    def __len__(self):
+        return len(self._children)
+
+
+def get_setting_for_context(settings_key, context=None, plugin_schema={}, validate=False):
     """
     """
     # the current bundle (the publisher instance)
@@ -121,7 +272,7 @@ def get_plugin_setting(settings_key, context=None, plugin_schema={}, validate=Fa
     dict_merge(schema, plugin_schema)
 
     # Resolve the setting value, this also implicitly validates the value
-    plugin_setting = sgtk.platform.bundle.resolve_setting_value(
+    resolved_setting = sgtk.platform.bundle.resolve_setting_value(
                           app_obj.sgtk,
                           app_obj.engine.name,
                           schema[settings_key],
@@ -131,10 +282,10 @@ def get_plugin_setting(settings_key, context=None, plugin_schema={}, validate=Fa
                           bundle=app_obj,
                           validate=validate
                       )
-    if not plugin_setting:
-        logger.debug("Could not find setting '%s' for context: %s" % (settings_key, context))
+    if not resolved_setting:
+        logger.debug("Could not resolve setting '%s' for context: %s" % (settings_key, context))
 
-    return plugin_setting
+    return resolved_setting
 
 def dict_merge(dct, merge_dct):
     """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of

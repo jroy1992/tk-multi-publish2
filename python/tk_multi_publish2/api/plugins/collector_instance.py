@@ -111,7 +111,7 @@ class CollectorPluginInstance(PluginInstanceBase):
         with self._handle_plugin_error(None, "Error changing context: %s"):
             self._hook_instance.on_context_changed(self.settings, item)
 
-    def _get_configured_settings(self, context):
+    def get_settings_for_context(self, context=None):
         """
         Find and resolve settings for the plugin in the specified context
 
@@ -119,6 +119,9 @@ class CollectorPluginInstance(PluginInstanceBase):
 
         :returns: The plugin settings for the given context or None.
         """
+        # Set the context if not specified
+        context = context or self._context
+
         # Inject this plugin's schema in the correct location for proper resolution
         plugin_schema = {
             "collector_settings" : {
@@ -127,7 +130,7 @@ class CollectorPluginInstance(PluginInstanceBase):
         }
 
         # Resolve and validate the plugin settings
-        return get_plugin_setting("collector_settings", context, plugin_schema, validate=True)
+        return get_setting_for_context("collector_settings", context, plugin_schema, validate=True)
 
     @contextmanager
     def _handle_plugin_error(self, success_msg, error_msg):

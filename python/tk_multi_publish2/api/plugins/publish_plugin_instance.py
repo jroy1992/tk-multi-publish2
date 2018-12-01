@@ -60,35 +60,6 @@ class PublishPluginInstance(PluginInstanceBase):
         hook.id = path
         return hook
 
-    def _get_configured_settings(self, context):
-        """
-        Find and resolve settings for the plugin in the specified context
-
-        :param context: Context in which to look for settings.
-
-        :returns: The plugin settings for the given context or None.
-        """
-        # Inject this plugin's schema in the correct location for proper resolution
-        plugin_schema = {
-            "publish_plugins" : {
-                "values" : {
-                    "items" : {
-                        "settings" : {
-                            "items" : self.settings_schema
-                        }
-                    }
-                }
-            }
-        }
-
-        # Resolve and validate the plugin settings
-        plugin_defs = get_plugin_setting("publish_plugins", context, plugin_schema, validate=True)
-
-        # Now get the plugin settings matching this plugin
-        for plugin_def in plugin_defs:
-            if plugin_def["name"] == self.name:
-                return plugin_def["settings"]
-
     @property
     def name(self):
         """
@@ -166,6 +137,37 @@ class PublishPluginInstance(PluginInstanceBase):
             for attr in ["create_settings_widget", "get_ui_settings", "set_ui_settings"]
         )
 
+    def get_settings_for_context(self, context=None):
+        """
+        Find and resolve settings for the plugin in the specified context
+
+        :param context: Context in which to look for settings.
+
+        :returns: The plugin settings for the given context or None.
+        """
+        # Set the context if not specified
+        context = context or self._context
+
+        # Inject this plugin's schema in the correct location for proper resolution
+        plugin_schema = {
+            "publish_plugins" : {
+                "values" : {
+                    "items" : {
+                        "settings" : {
+                            "items" : self.settings_schema
+                        }
+                    }
+                }
+            }
+        }
+
+        # Resolve and validate the plugin settings
+        plugin_defs = get_setting_for_context("publish_plugins", context, plugin_schema, validate=True)
+
+        # Now get the plugin settings matching this plugin
+        for plugin_def in plugin_defs:
+            if plugin_def["name"] == self.name:
+                return plugin_def["settings"]
 
     def init_task_settings(self, item):
         """
@@ -177,12 +179,8 @@ class PublishPluginInstance(PluginInstanceBase):
         :returns: dictionary of task settings
         """
         try:
-            # need to make a deep copy of the settings as they may be modified
-            settings = {}
-            for (setting_name, setting) in self.settings.items():
-                settings[setting_name] = copy.deepcopy(setting)
-
-            return self._hook_instance.init_task_settings(settings, item)
+            # get the initialized user defined task settings
+            task_settings = self._hook_instance.init_task_settings(item)
 
         except Exception:
             error_msg = traceback.format_exc()
@@ -190,18 +188,14 @@ class PublishPluginInstance(PluginInstanceBase):
                 "Error running init_task_settings for %s" % self,
                 extra = _get_error_extra_info(error_msg)
             )
-            return {}
+            task_settings = {}
         finally:
             if not sgtk.platform.current_engine().has_ui:
                 from sgtk.platform.qt import QtCore
                 QtCore.QCoreApplication.processEvents()
 
-    @property
-    def settings(self):
-        """
-        returns a dict of resolved raw settings given the current state
-        """
-        return self._settings
+        # return a deep copy of the settings
+        return copy.deepcopy(task_settings)
 
     def run_accept(self, task_settings, item):
         """

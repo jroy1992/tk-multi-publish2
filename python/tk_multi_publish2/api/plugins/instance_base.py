@@ -11,7 +11,7 @@
 import traceback
 
 import sgtk
-from .setting import PluginSetting
+from .setting import create_plugin_setting
 
 logger = sgtk.platform.get_logger(__name__)
 
@@ -101,7 +101,7 @@ class PluginInstanceBase(object):
 
         # Get the resolved settings for the plugin from the specified context
         try:
-            self._configured_settings = self._get_configured_settings(self._context)
+            self._configured_settings = self.get_settings_for_context(self._context)
         except Exception as e:
             error_msg = traceback.format_exc()
             self._logger.error(
@@ -110,15 +110,12 @@ class PluginInstanceBase(object):
             )
 
         for setting_name, setting_schema in self._settings_schema.iteritems():
-
-            setting = PluginSetting(
+            setting_value = self._configured_settings.get(setting_name)
+            setting = create_plugin_setting(
                 setting_name,
-                data_type=setting_schema.get("type"),
-                default_value=setting_schema.get("default_value"),
-                description=setting_schema.get("description")
+                setting_value,
+                setting_schema
             )
-            setting.value = self._configured_settings.get(setting_name)
-
             self._settings[setting_name] = setting
 
     @property
@@ -167,3 +164,13 @@ class PluginInstanceBase(object):
         instance in the pipeline configuration.
         """
         return self._settings_schema
+
+    def get_settings_for_context(self, context=None):
+        """
+        Find and resolve settings for the plugin in the specified context
+
+        :param context: Context in which to look for settings.
+
+        :returns: The plugin settings for the given context or None.
+        """
+        raise NotImplementedError
