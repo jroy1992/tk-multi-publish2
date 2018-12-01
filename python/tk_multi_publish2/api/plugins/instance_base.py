@@ -9,9 +9,7 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import traceback
-
 import sgtk
-from .setting import create_plugin_setting
 
 logger = sgtk.platform.get_logger(__name__)
 
@@ -44,7 +42,6 @@ class PluginInstanceBase(object):
 
         # all plugins need a hook and a name
         self._path = path
-        self._configured_settings = {}
         self._context = context
 
         self._settings = {}
@@ -82,7 +79,7 @@ class PluginInstanceBase(object):
         """
         Init helper method.
 
-        Validates plugin settings and creates PluginSetting objects
+        Validates plugin settings and creates a dictionary of Setting objects
         that can be accessed from the settings property.
         """
         try:
@@ -101,30 +98,13 @@ class PluginInstanceBase(object):
 
         # Get the resolved settings for the plugin from the specified context
         try:
-            self._configured_settings = self.get_settings_for_context(self._context)
+            self._settings = self.get_plugin_settings(self._context)
         except Exception as e:
             error_msg = traceback.format_exc()
             self._logger.error(
                 "Error validating settings for plugin %s in context '%s': %s" %
                 (self, self._context, error_msg)
             )
-
-        for setting_name, setting_schema in self._settings_schema.iteritems():
-            setting_value = self._configured_settings.get(setting_name)
-            setting = create_plugin_setting(
-                setting_name,
-                setting_value,
-                setting_schema
-            )
-            self._settings[setting_name] = setting
-
-    @property
-    def configured_settings(self):
-        """
-        A dictionary of settings data as originally specified for this plugin
-        instance in the pipeline configuration.
-        """
-        return self._configured_settings
 
     @property
     def logger(self):
@@ -165,7 +145,7 @@ class PluginInstanceBase(object):
         """
         return self._settings_schema
 
-    def get_settings_for_context(self, context=None):
+    def get_plugin_settings(self, context=None):
         """
         Find and resolve settings for the plugin in the specified context
 

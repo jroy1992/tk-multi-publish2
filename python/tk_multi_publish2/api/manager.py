@@ -476,7 +476,7 @@ class PublishManager(object):
             return plugins[0]
 
         collector_hook_path = setting.get_setting_for_context(
-            self.CONFIG_COLLECTOR_HOOK_PATH, context)
+            self.CONFIG_COLLECTOR_HOOK_PATH, context).value
 
         plugin = CollectorPluginInstance(
             collector_hook_path,
@@ -501,7 +501,8 @@ class PublishManager(object):
             return plugins
 
         # Go get the settings for this context
-        plugin_defs = setting.get_setting_for_context(self.CONFIG_PLUGIN_DEFINITIONS, context)
+        plugin_defs = setting.get_setting_for_context(
+            self.CONFIG_PLUGIN_DEFINITIONS, context).value
 
         # build up a list of all configured publish plugins here
         plugins = []

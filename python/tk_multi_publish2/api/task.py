@@ -9,7 +9,9 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import sgtk
-from .plugins import PluginSetting, PublishPluginInstance
+from sgtk.platform import create_setting
+
+from .plugins import PublishPluginInstance
 
 logger = sgtk.platform.get_logger(__name__)
 
@@ -66,13 +68,11 @@ class PublishTask(object):
 
         # create all the setting instances from the data
         for (k, setting) in task_dict["settings"].iteritems():
-            new_setting = PluginSetting(
+            new_setting = create_setting(
                 setting["name"],
-                setting["type"],
-                setting["default_value"],
-                setting["description"]
+                setting["value"],
+                setting["schema"]
             )
-            new_setting.value = setting["value"]
             new_task._settings[k] = new_setting
 
         return new_task

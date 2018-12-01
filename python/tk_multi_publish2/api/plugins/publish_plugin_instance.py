@@ -137,7 +137,7 @@ class PublishPluginInstance(PluginInstanceBase):
             for attr in ["create_settings_widget", "get_ui_settings", "set_ui_settings"]
         )
 
-    def get_settings_for_context(self, context=None):
+    def get_plugin_settings(self, context=None):
         """
         Find and resolve settings for the plugin in the specified context
 
@@ -162,7 +162,7 @@ class PublishPluginInstance(PluginInstanceBase):
         }
 
         # Resolve and validate the plugin settings
-        plugin_defs = get_setting_for_context("publish_plugins", context, plugin_schema, validate=True)
+        plugin_defs = get_setting_for_context("publish_plugins", context, plugin_schema)
 
         # Now get the plugin settings matching this plugin
         for plugin_def in plugin_defs:

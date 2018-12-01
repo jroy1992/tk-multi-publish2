@@ -10,4 +10,3 @@
 
 from .collector_instance import CollectorPluginInstance
 from .publish_plugin_instance import PublishPluginInstance
-from .setting import PluginSetting
