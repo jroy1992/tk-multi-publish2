@@ -59,7 +59,6 @@ class PublishManager(object):
         "_logger",
         "_tree",
         "_collector_instance",
-        "_plugins_cache",
         "_post_phase_hook"
     ]
 
@@ -70,6 +69,9 @@ class PublishManager(object):
     CONFIG_COLLECTOR_SETTINGS = "collector_settings"
     CONFIG_PLUGIN_DEFINITIONS = "publish_plugins"
     CONFIG_POST_PHASE_HOOK_PATH = "post_phase"
+
+    # a lookup of context to publish plugins.
+    _plugins_cache = PluginsCache()
 
     ############################################################################
     # special item property keys
@@ -100,21 +102,18 @@ class PublishManager(object):
         self._logger = publish_logger or logger
 
         # the underlying tree representation of the items to publish
-        self._tree = PublishTree()
+        self._tree = PublishTree(self._logger)
 
         # collector instance for this context
         self._collector_instance = None
 
-        # a lookup of context to publish plugins.
-        self._plugins_cache = PluginsCache()
-
         # initialize the collector plugin
         logger.debug("Loading collector plugin...")
-        self._collector_instance = self.load_collector(self._bundle.context)
+        self._collector_instance = self.load_collector(self._bundle.context, self._logger)
 
         # go ahead and load the plugins for the current context for efficiency
         logger.debug("Loading plugins for the current context...")
-        self.load_publish_plugins(self._bundle.context)
+        self.load_publish_plugins(self._bundle.context, self._logger)
 
         # load the phose phase hook
         logger.debug("Loading post phase hook...")
@@ -464,45 +463,47 @@ class PublishManager(object):
         """
         for item in items:
             logger.debug("Processing item: %s" % (item,))
-            item.refresh_tasks(item.context, self)
+            item.refresh_tasks(item.context, self._logger)
 
-    def load_collector(self, context):
+    @classmethod
+    def load_collector(cls, context, publish_logger):
         """
         Load the collector plugin for the current bundle configuration/context.
         """
         # return the cached plugin if the context has already been processed
-        plugins = self._plugins_cache.get(self.CONFIG_COLLECTOR_HOOK_PATH, context)
+        plugins = cls._plugins_cache.get(cls.CONFIG_COLLECTOR_HOOK_PATH, context)
         if plugins:
             return plugins[0]
 
         collector_hook_path = setting.get_setting_for_context(
-            self.CONFIG_COLLECTOR_HOOK_PATH, context).value
+            cls.CONFIG_COLLECTOR_HOOK_PATH, context).value
 
         plugin = CollectorPluginInstance(
             collector_hook_path,
             context,
-            self
+            publish_logger
         )
 
         # ensure the plugins are cached
-        self._plugins_cache.add(self.CONFIG_COLLECTOR_HOOK_PATH, context, [plugin])
+        cls._plugins_cache.add(cls.CONFIG_COLLECTOR_HOOK_PATH, context, [plugin])
 
         return plugin
 
-    def load_publish_plugins(self, context):
+    @classmethod
+    def load_publish_plugins(cls, context, publish_logger):
         """
         Given a context, this method load the corresponding, configured publish
         plugins.
         """
 
         # return the cached plugins if the context has already been processed
-        plugins = self._plugins_cache.get(self.CONFIG_PLUGIN_DEFINITIONS, context)
+        plugins = cls._plugins_cache.get(cls.CONFIG_PLUGIN_DEFINITIONS, context)
         if plugins:
             return plugins
 
         # Go get the settings for this context
         plugin_defs = setting.get_setting_for_context(
-            self.CONFIG_PLUGIN_DEFINITIONS, context).value
+            cls.CONFIG_PLUGIN_DEFINITIONS, context).value
 
         # build up a list of all configured publish plugins here
         plugins = []
@@ -519,13 +520,13 @@ class PublishManager(object):
                 publish_plugin_instance_name,
                 publish_plugin_hook_path,
                 context,
-                self
+                publish_logger
             )
             plugins.append(plugin_instance)
             logger.debug("Created publish plugin: %s" % (plugin_instance,))
 
         # ensure the plugins are cached
-        self._plugins_cache.add(self.CONFIG_PLUGIN_DEFINITIONS, context, plugins)
+        cls._plugins_cache.add(cls.CONFIG_PLUGIN_DEFINITIONS, context, plugins)
 
         return plugins
 

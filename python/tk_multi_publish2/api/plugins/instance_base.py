@@ -22,23 +22,21 @@ class PluginInstanceBase(object):
     Each object reflects an instance in the app configuration.
     """
 
-    def __init__(self, path, context, publish_manager):
+    def __init__(self, path, context, publish_logger):
         """
         Initialize a plugin instance.
 
         :param path: Path to the collector hook
         :param context: The Context to use to resolve this plugin's settings
-        :param publish_manager: The PublishManager object that generated this plugin instance.
+        :param publish_logger: a logger object that will be used by the hook
         """
 
         super(PluginInstanceBase, self).__init__()
 
-        self._manager = publish_manager
+        if not publish_logger:
+            publish_logger = logger
 
-        if self._manager.logger:
-            self._logger = self._manager.logger
-        else:
-            self._logger = logger
+        self._logger = publish_logger
 
         # all plugins need a hook and a name
         self._path = path
@@ -117,13 +115,6 @@ class PluginInstanceBase(object):
     def logger(self, new_logger):
         # set the plugin's logger instance
         self._logger = new_logger
-
-    @property
-    def manager(self):
-        """
-        The publish manager that generated this plugin instance.
-        """
-        return self._manager
 
     @property
     def path(self):

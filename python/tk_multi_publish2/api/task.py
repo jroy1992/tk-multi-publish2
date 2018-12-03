@@ -9,8 +9,6 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import sgtk
-from sgtk.platform import create_setting
-
 from .plugins import PublishPluginInstance
 
 logger = sgtk.platform.get_logger(__name__)
@@ -49,12 +47,19 @@ class PublishTask(object):
             serialize this data.
         :param item: Optional item to associate with this task
         """
+        # get the plugin context
+        plugin_context = None
+        if task_dict["plugin_context"]:
+            plugin_context = sgtk.Context.from_dict(
+                sgtk.platform.current_bundle().sgtk,
+                task_dict["plugin_context"]
+            )
 
         # create the plugin instance
         plugin = PublishPluginInstance(
             task_dict["plugin_name"],
             task_dict["plugin_path"],
-            task_dict["plugin_settings"],
+            plugin_context
         )
 
         # create the instance and assign all the internal members
@@ -66,14 +71,6 @@ class PublishTask(object):
         new_task._visible = task_dict["visible"]
         new_task._enabled = task_dict["enabled"]
 
-        # create all the setting instances from the data
-        for (k, setting) in task_dict["settings"].iteritems():
-            new_setting = create_setting(
-                setting["name"],
-                setting["value"],
-                setting["schema"]
-            )
-            new_task._settings[k] = new_setting
 
         return new_task
 
@@ -102,20 +99,13 @@ class PublishTask(object):
         Returns a dictionary representation of a :class:`~PublishTask` instance.
         Typically used during serialization.
         """
-
-        # Convert each of the settings to a dictionary.
-        converted_settings = {}
-        for (k, setting) in self._settings.iteritems():
-            converted_settings[k] = setting.to_dict()
-
         # build the full dictionary representation of this task
         return {
             "plugin_name": self.plugin.name,
             "plugin_path": self.plugin.path,
-            "plugin_settings": self.plugin.configured_settings,
+            "plugin_context": self.plugin.context.to_dict(),
             "name": self._name,
             "description": self._description,
-            "settings": converted_settings,
             "accepted": self._accepted,
             "active": self._active,
             "visible": self._visible,
