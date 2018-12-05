@@ -162,7 +162,7 @@ class PublishPluginInstance(PluginInstanceBase):
         }
 
         # Resolve and validate the plugin settings
-        plugin_defs = get_setting_for_context("publish_plugins", context, plugin_schema)
+        plugin_defs = get_setting_for_context("publish_plugins", context, plugin_schema, validate=True)
 
         # Now get the plugin settings matching this plugin
         for plugin_def in plugin_defs:

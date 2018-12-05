@@ -16,7 +16,7 @@ from sgtk.platform import create_setting
 
 logger = sgtk.platform.get_logger(__name__)
 
-def get_setting_for_context(setting_key, context=None, plugin_schema={}):
+def get_setting_for_context(setting_key, context=None, plugin_schema={}, validate=False):
     """
     """
     # the current bundle (the publisher instance)
@@ -66,8 +66,8 @@ def get_setting_for_context(setting_key, context=None, plugin_schema={}):
     new_descriptor = new_env.get_app_descriptor(new_eng, new_app)
 
     # Inject the plugin's schema for proper settings resolution
-    schema = copy.deepcopy(new_descriptor.configuration_schema)
-    dict_merge(schema, plugin_schema)
+    new_schema = copy.deepcopy(new_descriptor.configuration_schema)
+    dict_merge(new_schema, plugin_schema)
 
     # Create a new app instance for the new context
     app_obj = sgtk.platform.application.get_application(
@@ -83,13 +83,17 @@ def get_setting_for_context(setting_key, context=None, plugin_schema={}):
 # descriptor object, hence we cannot use the app object's settings dict
 # since it will lack our injected plugin schema data. The workaround is
 # to create a new Setting object, which is less efficient.
-#    # Return the context-specific app instance's setting value
-#    return app_obj.settings.get(setting_key)
+#    # Get the context-specific app instance's setting value
+#    setting = app_obj.settings.get(setting_key)
 
     setting_value = new_settings.get(setting_key)
-    setting_schema = schema.get(setting_key)
+    setting_schema = new_schema.get(setting_key)
 
-    return create_setting(setting_key, setting_value, setting_schema, app_obj)
+    setting = create_setting(setting_key, setting_value, setting_schema, app_obj)
+    if validate:
+        setting.validate()
+
+    return setting
 
 def dict_merge(dct, merge_dct):
     """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of

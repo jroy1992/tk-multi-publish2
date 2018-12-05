@@ -61,7 +61,7 @@ class CollectorPluginInstance(PluginInstanceBase):
         }
 
         # Resolve and validate the plugin settings
-        return get_setting_for_context("collector_settings", context, plugin_schema)
+        return get_setting_for_context("collector_settings", context, plugin_schema, validate=True)
 
     def run_process_file(self, item, path):
         """
