@@ -42,6 +42,27 @@ class CollectorPluginInstance(PluginInstanceBase):
         plugin.id = path
         return plugin
 
+    def get_plugin_settings(self, context=None):
+        """
+        Find and resolve settings for the plugin in the specified context
+
+        :param context: Context in which to look for settings.
+
+        :returns: The plugin settings for the given context or None.
+        """
+        # Set the context if not specified
+        context = context or self._context
+
+        # Inject this plugin's schema in the correct location for proper resolution
+        plugin_schema = {
+            "collector_settings" : {
+                "items" : self.settings_schema
+            }
+        }
+
+        # Resolve and validate the plugin settings
+        return get_setting_for_context("collector_settings", context, plugin_schema, validate=True)
+
     def run_process_file(self, item, path):
         """
         Executes the hook process_file method
@@ -110,24 +131,6 @@ class CollectorPluginInstance(PluginInstanceBase):
         """
         with self._handle_plugin_error(None, "Error changing context: %s"):
             self._hook_instance.on_context_changed(self.settings, item)
-
-    def _get_configured_settings(self, context):
-        """
-        Find and resolve settings for the plugin in the specified context
-
-        :param context: Context in which to look for settings.
-
-        :returns: The plugin settings for the given context or None.
-        """
-        # Inject this plugin's schema in the correct location for proper resolution
-        plugin_schema = {
-            "collector_settings" : {
-                "items" : self.settings_schema
-            }
-        }
-
-        # Resolve and validate the plugin settings
-        return get_plugin_setting("collector_settings", context, plugin_schema, validate=True)
 
     @contextmanager
     def _handle_plugin_error(self, success_msg, error_msg):

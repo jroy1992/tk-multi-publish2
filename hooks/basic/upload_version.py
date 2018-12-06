@@ -104,8 +104,8 @@ class UploadVersionPlugin(HookBaseClass):
         :param item: Item to process
         :returns: dictionary of settings for this item's task
         """
-        # Return the task settings
-        return task_settings
+        # Return the plugin settings
+        return self.plugin.settings
 
     def accept(self, task_settings, item):
         """

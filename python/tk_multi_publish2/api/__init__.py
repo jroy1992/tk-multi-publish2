@@ -13,4 +13,3 @@ from .manager import PublishManager
 from .item import PublishItem
 from .task import PublishTask
 from .tree import PublishTree
-from .plugins import PluginSetting

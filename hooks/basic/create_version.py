@@ -93,7 +93,7 @@ class CreateVersionPlugin(HookBaseClass):
         schema["Item Type Filters"]["default_value"] = ["file.*.sequence"]
         return schema
 
-    def init_task_settings(self, task_settings, item):
+    def init_task_settings(self, item):
         """
         Method called by the publisher to determine the initial settings for the
         instantiated task.
@@ -102,8 +102,8 @@ class CreateVersionPlugin(HookBaseClass):
         :param item: Item to process
         :returns: dictionary of settings for this item's task
         """
-        # Return the task settings
-        return task_settings
+        # Return the plugin settings
+        return self.plugin.settings
 
     def accept(self, task_settings, item):
         """

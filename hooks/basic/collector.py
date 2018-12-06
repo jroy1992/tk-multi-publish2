@@ -628,14 +628,14 @@ class FileCollectorPlugin(HookBaseClass):
         path = item.properties.get("path")
 
         if not path:
-            if not item.is_root():
+            if not item.is_root:
                 version = self._get_version_number_r(item.parent)
             else:
                 version = 1
         else:
             version = publisher.util.get_version_number(path)
             if not version:
-                if not item.is_root():
+                if not item.is_root:
                     version = self._get_version_number_r(item.parent)
                 else:
                     version = 1
