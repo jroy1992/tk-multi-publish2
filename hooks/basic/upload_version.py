@@ -95,12 +95,11 @@ class UploadVersionPlugin(HookBaseClass):
         }
         return schema
 
-    def init_task_settings(self, task_settings, item):
+    def init_task_settings(self, item):
         """
         Method called by the publisher to determine the initial settings for the
         instantiated task.
 
-        :param task_settings: Instance of the plugin settings specific for this item
         :param item: Item to process
         :returns: dictionary of settings for this item's task
         """

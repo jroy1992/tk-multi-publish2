@@ -251,9 +251,9 @@ class PublishPlugin(PluginBase):
 
     def init_task_settings(self, item):
         """
-        Method called by the publisher to allow modifications to the initial task settings.
+        Method called by the publisher to determine the initial settings for the
+        instantiated task.
 
-        :param task_settings: Instance of the plugin settings specific for this item/task
         :param item: The parent item of the task
         :returns: dictionary of settings for this item's task
         """
