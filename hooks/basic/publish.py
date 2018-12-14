@@ -48,6 +48,10 @@ class PublishPlugin(HookBaseClass):
             registering the publish. If the item's parent has been published,
             it's path will be appended to this list.
 
+        ``publish_user`` - If set, will be supplied to SG as the publish user
+            when registering the new publish. If not available, the publishing
+            will fall back to the :meth:`tank.util.register_publish` logic.
+
 
     The following are the item_type-specific settings that are available for each task instance::
 
@@ -241,8 +245,7 @@ class PublishPlugin(HookBaseClass):
                 "<pre>%s</pre>" % (pprint.pformat(publishes),)
             )
             self.logger.warning(
-                "Found %s conflicting publishes in Shotgun" %
-                    (len(publishes),),
+                "Found %s conflicting publishes in Shotgun" % (len(publishes),),
                 extra={
                     "action_show_more_info": {
                         "label": "Show Conflicts",
@@ -330,6 +333,7 @@ class PublishPlugin(HookBaseClass):
         publish_symlink_path  = item.properties.publish_symlink_path
         publish_type          = item.properties.publish_type
         publish_version       = item.properties.publish_version
+        publish_user          = item.get_property("publish_user", default_value=None)
 
         # handle publishing of files first
         self.publish_files(task_settings, item, publish_path)
@@ -372,6 +376,7 @@ class PublishPlugin(HookBaseClass):
             "comment": item.description,
             "path": publish_path,
             "name": publish_name,
+            "created_by": publish_user,
             "version_number": publish_version,
             "thumbnail_path": item.get_thumbnail_as_path() or "",
             "published_file_type": publish_type,
@@ -399,6 +404,16 @@ class PublishPlugin(HookBaseClass):
         try:
             sg_publish_data = sgtk.util.register_publish(**publish_data)
             self.logger.info("Publish registered!")
+            self.logger.debug(
+                "Shotgun Publish data...",
+                extra={
+                    "action_show_more_info": {
+                        "label": "Shotgun Publish Data",
+                        "tooltip": "Show the complete Shotgun Publish Entity dictionary",
+                        "text": "<pre>%s</pre>" % (pprint.pformat(sg_publish_data),)
+                    }
+                }
+            )
         except Exception as e:
             exception = e
             self.logger.error(
