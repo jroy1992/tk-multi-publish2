@@ -9,6 +9,7 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import os
+import copy
 import stat
 import traceback
 import pprint
@@ -248,17 +249,17 @@ class PublishPlugin(PluginBase):
     ############################################################################
     # Publish processing methods
 
-    def init_task_settings(self, task_settings, item):
+    def init_task_settings(self, item):
         """
-        Method called by the publisher to allow modifications to the initial task settings.
+        Method called by the publisher to determine the initial settings for the
+        instantiated task.
 
-        :param task_settings: Instance of the plugin settings specific for this item/task
         :param item: The parent item of the task
         :returns: dictionary of settings for this item's task
         """
         # Return the item-type specific settings
-        if item.type not in task_settings["Item Type Settings"].value:
-            msg = "Key: %s\n%s" % (item.type, pprint.pformat(task_settings["Item Type Settings"].value))
+        if item.type not in self.plugin.settings["Item Type Settings"]:
+            msg = "Key: %s\n%s" % (item.type, pprint.pformat(self.plugin.settings["Item Type Settings"]))
             self.logger.warning(
                 "'Item Type Settings' are missing for item type: '%s'" % item.type,
                 extra={
@@ -270,7 +271,7 @@ class PublishPlugin(PluginBase):
                 }
             )
             return {}
-        return task_settings["Item Type Settings"].value.get(item.type)
+        return self.plugin.settings["Item Type Settings"].get(item.type)
 
     def accept(self, task_settings, item):
         """

@@ -67,7 +67,6 @@ class PublishItem(object):
         "_active",
         "_allows_context_change",
         "_children",
-        "_collector",
         "_context",
         "_created_temp_files",
         "_current_temp_file_path",
@@ -78,6 +77,7 @@ class PublishItem(object):
         "_icon_path",
         "_icon_pixmap",
         "_local_properties",
+        "_logger",
         "_name",
         "_parent",
         "_persistent",
@@ -114,7 +114,6 @@ class PublishItem(object):
         # populate all the instance data from the dictionary
         new_item._active = item_dict["active"]
         new_item._allows_context_change = item_dict["allows_context_change"]
-        new_item._collector = item_dict["collector"]
         new_item._description = item_dict["description"]
         new_item._enabled = item_dict["enabled"]
         new_item._expanded = item_dict["expanded"]
@@ -165,7 +164,7 @@ class PublishItem(object):
 
         return new_item
 
-    def __init__(self, name, type_spec, type_display, collector, context, properties, parent=None):
+    def __init__(self, name, type_spec, type_display, publish_logger=None, parent=None):
         """
         .. warning:: You should not create item instances directly. Instead, use
             the :meth:`~PublishItem.create_item` method of the parent you wish
@@ -184,17 +183,17 @@ class PublishItem(object):
         self._active = True
         self._allows_context_change = True
         self._children = []
-        self._collector = collector
         self._context = None
         self._created_temp_files = []
         self._current_temp_file_path = None
         self._description = None
         self._enabled = True
         self._expanded = True
-        self._global_properties = PublishData(**properties)
+        self._global_properties = PublishData()
         self._icon_path = None
         self._icon_pixmap = None
         self._local_properties = defaultdict(PublishData)
+        self._logger = publish_logger
         self._name = name
         self._parent = parent
         self._persistent = False
@@ -205,14 +204,6 @@ class PublishItem(object):
         self._thumbnail_pixmap = None
         self._type_display = type_display
         self._type_spec = type_spec
-
-        # Set the context on the item if defined
-        if context:
-            self.context = context
-
-        # If a parent exists, set the initial context to the parent's context
-        elif self._parent:
-            self.context = self._parent.context
 
     def __del__(self):
         """
@@ -254,7 +245,6 @@ class PublishItem(object):
             "active": self.active,
             "allows_context_change": self._allows_context_change,
             "children": [c.to_dict() for c in self._children],
-            "collector": self.collector,
             "context": context_value,
             "description": self.description,
             "enabled": self.enabled,
@@ -299,7 +289,7 @@ class PublishItem(object):
         """
         self._tasks = []
 
-    def create_item(self, type_spec, type_display, name, collector, context=None, properties={}):
+    def create_item(self, type_spec, type_display, name, collector=None, context=None, properties={}):
         """
         Factory method for generating new items.
 
@@ -360,12 +350,17 @@ class PublishItem(object):
             name,
             type_spec,
             type_display,
-            collector,
-            context,
-            properties,
+            None,
             parent=self
         )
         self._children.append(child_item)
+
+        # Set any initial global properties
+        child_item._global_properties = PublishData.from_dict(properties)
+
+        # Set the context on the child item if defined
+        context = context or self.context
+        child_item.context = context
 
         return child_item
 
@@ -609,13 +604,6 @@ class PublishItem(object):
                 yield sub_c
 
     @property
-    def collector(self):
-        """
-        The collector plugin that generated this item
-        """
-        return self._collector
-
-    @property
     def context(self):
         """
         The :class:`sgtk.Context` associated with this item.
@@ -653,16 +641,17 @@ class PublishItem(object):
         """
         Update context for item, plus any associated tasks or child items
         """
-        publish_manager = self._collector.manager
+        publish_logger = self.logger
 
         # Get the collector object for the new context
-        collector = publish_manager.load_collector(context)
+        from .manager import PublishManager
+        collector = PublishManager.load_collector(context, publish_logger)
 
         # Update the item's properties using the new collector
         collector.run_on_context_changed(self)
 
         # Next re-initialize the item's list of tasks
-        self.refresh_tasks(context, publish_manager)
+        self.refresh_tasks(context, publish_logger)
 
         # Now traverse down the hierarchy and apply to all children
         for child in self.children:
@@ -671,12 +660,13 @@ class PublishItem(object):
             if not child._context:
                 child._set_context_r(context)
 
-    def refresh_tasks(self, context, publish_manager):
+    def refresh_tasks(self, context, publish_logger):
         """
         Refresh the list of tasks for this item based on the provided Context object
         """
         # Get the list of publish plugins for this context
-        context_plugins = publish_manager.load_publish_plugins(context)
+        from .manager import PublishManager
+        context_plugins = PublishManager.load_publish_plugins(context, publish_logger)
         logger.debug(
             "Offering %s plugins for context: %s" % (len(context_plugins), context)
         )
@@ -918,6 +908,22 @@ class PublishItem(object):
             JSON-serialized.
         """
         return self._get_local_properties()
+
+    @property
+    def logger(self):
+        """
+        The publish_logger associated with this item.
+
+        If no logger has been explicitly set for this item, the logger will be
+        inherited from the item's parent.
+        """
+
+        if self._logger:
+            return self._logger
+        elif self.parent:
+            return self.parent.logger
+        else:
+            return None
 
     @property
     def name(self):

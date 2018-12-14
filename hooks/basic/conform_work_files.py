@@ -154,7 +154,7 @@ class ConformWorkFilesPlugin(HookBaseClass):
             return accept_data
 
         # Get work_path_template from the accept_data
-        work_path_template = task_settings.get("work_path_template")
+        work_path_template = task_settings.get("work_path_template").value
 
         # Call sub method for comparing the item's path with the work_path_template
         # to see if this plugin should be accepted.
@@ -352,7 +352,7 @@ class ConformWorkFilesPlugin(HookBaseClass):
         publisher = self.parent
         fields = {}
 
-        work_path_template = task_settings.get("work_path_template")
+        work_path_template = task_settings.get("work_path_template").value
         if not work_path_template:
             self.logger.info("work_path_template not defined. Skipping conform.")
             return item.properties.path

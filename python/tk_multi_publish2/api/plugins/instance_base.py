@@ -9,9 +9,7 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import traceback
-
 import sgtk
-from .setting import PluginSetting
 
 logger = sgtk.platform.get_logger(__name__)
 
@@ -24,27 +22,24 @@ class PluginInstanceBase(object):
     Each object reflects an instance in the app configuration.
     """
 
-    def __init__(self, path, context, publish_manager):
+    def __init__(self, path, context, publish_logger):
         """
         Initialize a plugin instance.
 
         :param path: Path to the collector hook
         :param context: The Context to use to resolve this plugin's settings
-        :param publish_manager: The PublishManager object that generated this plugin instance.
+        :param publish_logger: a logger object that will be used by the hook
         """
 
         super(PluginInstanceBase, self).__init__()
 
-        self._manager = publish_manager
+        if not publish_logger:
+            publish_logger = logger
 
-        if self._manager.logger:
-            self._logger = self._manager.logger
-        else:
-            self._logger = logger
+        self._logger = publish_logger
 
         # all plugins need a hook and a name
         self._path = path
-        self._configured_settings = {}
         self._context = context
 
         self._settings = {}
@@ -82,7 +77,7 @@ class PluginInstanceBase(object):
         """
         Init helper method.
 
-        Validates plugin settings and creates PluginSetting objects
+        Validates plugin settings and creates a dictionary of Setting objects
         that can be accessed from the settings property.
         """
         try:
@@ -101,33 +96,13 @@ class PluginInstanceBase(object):
 
         # Get the resolved settings for the plugin from the specified context
         try:
-            self._configured_settings = self._get_configured_settings(self._context)
+            self._settings = self.get_plugin_settings(self._context)
         except Exception as e:
             error_msg = traceback.format_exc()
             self._logger.error(
                 "Error validating settings for plugin %s in context '%s': %s" %
                 (self, self._context, error_msg)
             )
-
-        for setting_name, setting_schema in self._settings_schema.iteritems():
-
-            setting = PluginSetting(
-                setting_name,
-                data_type=setting_schema.get("type"),
-                default_value=setting_schema.get("default_value"),
-                description=setting_schema.get("description")
-            )
-            setting.value = self._configured_settings.get(setting_name)
-
-            self._settings[setting_name] = setting
-
-    @property
-    def configured_settings(self):
-        """
-        A dictionary of settings data as originally specified for this plugin
-        instance in the pipeline configuration.
-        """
-        return self._configured_settings
 
     @property
     def logger(self):
@@ -140,13 +115,6 @@ class PluginInstanceBase(object):
     def logger(self, new_logger):
         # set the plugin's logger instance
         self._logger = new_logger
-
-    @property
-    def manager(self):
-        """
-        The publish manager that generated this plugin instance.
-        """
-        return self._manager
 
     @property
     def path(self):
@@ -167,3 +135,13 @@ class PluginInstanceBase(object):
         instance in the pipeline configuration.
         """
         return self._settings_schema
+
+    def get_plugin_settings(self, context=None):
+        """
+        Find and resolve settings for the plugin in the specified context
+
+        :param context: Context in which to look for settings.
+
+        :returns: The plugin settings for the given context or None.
+        """
+        raise NotImplementedError

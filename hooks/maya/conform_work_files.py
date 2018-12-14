@@ -86,7 +86,7 @@ class NukeConformWorkFilesPlugin(HookBaseClass):
                 return accept_data
 
             # Overwrite the work_path_template setting for this task
-            task_settings["work_path_template"] = self.__write_node_app.get_node_render_template(node).name
+            task_settings["work_path_template"].value = self.__write_node_app.get_node_render_template(node).name
 
         # return the accepted info
         return accept_data

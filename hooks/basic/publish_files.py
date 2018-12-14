@@ -469,7 +469,7 @@ class PublishFilesPlugin(HookBaseClass):
 
         # get any additional_publish_fields that have been defined
         sg_fields = {}
-        additional_fields = task_settings.get("additional_publish_fields", {})
+        additional_fields = task_settings.get("additional_publish_fields").value or {}
         for template_key, sg_field in additional_fields.iteritems():
             if template_key in item.properties.fields:
                 sg_fields[sg_field] = item.properties.fields[template_key]
@@ -637,7 +637,7 @@ class PublishFilesPlugin(HookBaseClass):
 
         :return: A publish type or None if one could not be found.
         """
-        publish_type = task_settings.get("publish_type")
+        publish_type = task_settings.get("publish_type").value
         if not publish_type:
             raise TankError("publish_type not set for item: %s" % item.name)
 
@@ -662,7 +662,7 @@ class PublishFilesPlugin(HookBaseClass):
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
 
-        publish_path_template = task_settings.get("publish_path_template")
+        publish_path_template = task_settings.get("publish_path_template").value
         publish_path = None
 
         # If a template is defined, get the publish path from it
@@ -720,7 +720,7 @@ class PublishFilesPlugin(HookBaseClass):
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
 
-        publish_symlink_template = task_settings.get("publish_symlink_template")
+        publish_symlink_template = task_settings.get("publish_symlink_template").value
         publish_symlink_path = None
 
         # If a template is defined, get the publish symlink path from it
@@ -782,7 +782,7 @@ class PublishFilesPlugin(HookBaseClass):
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
 
-        publish_name_template = task_settings.get("publish_name_template")
+        publish_name_template = task_settings.get("publish_name_template").value
         publish_name = None
 
         # First check if we have a publish_name_template defined and attempt to
@@ -833,7 +833,7 @@ class PublishFilesPlugin(HookBaseClass):
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
 
-        publish_linked_entity_name_template = task_settings.get("publish_linked_entity_name_template")
+        publish_linked_entity_name_template = task_settings.get("publish_linked_entity_name_template").value
         publish_linked_entity_name = None
 
         # check if we have a publish_linked_entity_name_template defined
