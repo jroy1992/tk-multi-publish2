@@ -160,7 +160,7 @@ class PublishTree(object):
             )
             raise
 
-    def __init__(self):
+    def __init__(self, publish_logger=None):
         """Initialize the publish tree instance."""
 
         # The root item is the sole parent of all top level publish items. It
@@ -170,9 +170,7 @@ class PublishTree(object):
             "__root__",
             "__root__",
             "__root__",
-            None,
-            None,
-            {},
+            publish_logger,
             parent=None
         )
 

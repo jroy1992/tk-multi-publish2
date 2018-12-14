@@ -73,8 +73,8 @@ class NukePublishFilesPlugin(HookBaseClass):
                 return accept_data
 
             # Overwrite the publish_type and publish_path_template settings for this task
-            task_settings["publish_type"] = self.__write_node_app.get_node_tank_type(node)
-            task_settings["publish_path_template"] = self.__write_node_app.get_node_publish_template(node).name
+            task_settings["publish_type"].value = self.__write_node_app.get_node_tank_type(node)
+            task_settings["publish_path_template"].value = self.__write_node_app.get_node_publish_template(node).name
 
         # return the accepted info
         return accept_data

@@ -642,7 +642,7 @@ class FileCollectorPlugin(HookBaseClass):
         publisher = self.parent
 
         # If this isn't the root item...
-        if not item.is_root():
+        if not item.is_root:
             # Try and get the version from the parent's fields
             if "fields" in item.parent.properties:
                 version = item.parent.properties.fields.get("version")
