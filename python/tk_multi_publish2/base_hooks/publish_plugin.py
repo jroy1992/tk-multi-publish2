@@ -8,15 +8,10 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import os
-import copy
-import stat
-import traceback
-import pprint
 import sgtk
-from sgtk.util import filesystem
 
 from .base import PluginBase
+
 
 class PublishPlugin(PluginBase):
     """
@@ -28,20 +23,6 @@ class PublishPlugin(PluginBase):
 
     ############################################################################
     # Plugin properties
-
-    @property
-    def id(self):
-        """
-        Unique string identifying this plugin.
-        """
-        return self._id
-
-    @id.setter
-    def id(self, new_id):
-        """
-        Allows to set the unique string identifying this plugin.
-        """
-        self._id = new_id
 
     @property
     def icon(self):
@@ -257,21 +238,7 @@ class PublishPlugin(PluginBase):
         :param item: The parent item of the task
         :returns: dictionary of settings for this item's task
         """
-        # Return the item-type specific settings
-        if item.type not in self.plugin.settings["Item Type Settings"]:
-            msg = "Key: %s\n%s" % (item.type, pprint.pformat(self.plugin.settings["Item Type Settings"]))
-            self.logger.warning(
-                "'Item Type Settings' are missing for item type: '%s'" % item.type,
-                extra={
-                    "action_show_more_info": {
-                        "label": "Show Info",
-                        "tooltip": "Show more info",
-                        "text": msg
-                    }
-                }
-            )
-            return {}
-        return self.plugin.settings["Item Type Settings"].get(item.type)
+        return self.plugin.settings
 
     def accept(self, task_settings, item):
         """
@@ -340,23 +307,7 @@ class PublishPlugin(PluginBase):
 
         :returns: dictionary with boolean keys accepted, required and enabled
         """
-        accept_data = {}
-
-        # Only accept this item if we have its task settings dict
-        if not task_settings:
-            msg = "Unable to find task_settings for plugin: %s" % self.name
-            accept_data["extra_info"] = {
-                "action_show_more_info": {
-                    "label": "Show Info",
-                    "tooltip": "Show more info",
-                    "text": msg
-                }
-            }
-            accept_data["accepted"] = False
-        else:
-            accept_data["accepted"] = True
-
-        return accept_data
+        raise NotImplementedError
 
     def validate(self, task_settings, item):
         """
@@ -488,15 +439,17 @@ class PublishPlugin(PluginBase):
 
             def undo(self, task_settings, item):
 
+                publisher = self.parent
+
                 sg_publish_data_list = item.properties.get("sg_publish_data_list")
                 publish_path = item.properties.get("publish_path")
                 publish_symlink_path = item.properties.get("publish_symlink_path")
 
                 if publish_symlink_path:
-                    self._delete_files(publish_symlink_path, item)
+                    publisher.util.delete_files(publish_symlink_path, item)
 
                 if publish_path:
-                    self._delete_files(publish_path, item)
+                    publisher.util.delete_files(publish_path, item)
 
                 if sg_publish_data_list:
                     for publish_data in sg_publish_data_list:
@@ -646,213 +599,3 @@ class PublishPlugin(PluginBase):
         # is a no-op. this method is required to be defined in order for the
         # custom UI to show up in the app
         pass
-
-
-    ############################################################################
-    # protected helper methods
-
-    def _copy_files(self, src_files, dest_path, is_sequence=False):
-        """
-        This method handles copying an item's path(s) to a designated location.
-
-        If the item has "sequence_paths" set, it will attempt to copy all paths
-        assuming they meet the required criteria.
-        """
-
-        publisher = self.parent
-
-        # ---- copy the src files to the dest location
-        processed_files = []
-        for src_file in src_files:
-
-            if is_sequence:
-                frame_num = publisher.util.get_frame_number(src_file)
-                dest_file = publisher.util.get_path_for_frame(dest_path, frame_num)
-            else:
-                dest_file = dest_path
-
-            # If the file paths are the same, lock permissions
-            if src_file == dest_file:
-                filesystem.freeze_permissions(dest_file)
-                continue
-
-            # copy the file
-            try:
-                dest_folder = os.path.dirname(dest_file)
-                filesystem.ensure_folder_exists(dest_folder)
-                filesystem.copy_file(src_file, dest_file,
-                          permissions=stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
-                          seal=True)
-            except Exception as e:
-                raise Exception(
-                    "Failed to copy file from '%s' to '%s'.\n%s" %
-                    (src_file, dest_file, traceback.format_exc())
-                )
-
-            self.logger.debug(
-                "Copied file '%s' to '%s'." % (src_file, dest_file)
-            )
-            processed_files.append(dest_file)
-
-        return processed_files
-
-
-    def _symlink_files(self, src_files, dest_path, is_sequence=False):
-        """
-        This method handles symlink an item's publish_path to publish_symlink_path,
-        assuming publish_symlink_path is already populated.
-
-        If the item has "sequence_paths" set, it will attempt to symlink all paths
-        assuming they meet the required criteria.
-        """
-
-        publisher = self.parent
-
-        # ---- symlink the publish files to the publish symlink path
-        processed_files = []
-        for src_file in src_files:
-
-            if is_sequence:
-                frame_num = publisher.util.get_frame_number(src_file)
-                dest_file = publisher.util.get_path_for_frame(dest_path, frame_num)
-            else:
-                dest_file = dest_path
-
-            # If the file paths are the same, skip...
-            if src_file == dest_file:
-                continue
-
-            # symlink the file
-            try:
-                dest_folder = os.path.dirname(dest_file)
-                filesystem.ensure_folder_exists(dest_folder)
-                filesystem.symlink_file(src_file, dest_file)
-            except Exception as e:
-                raise Exception(
-                    "Failed to link file from '%s' to '%s'.\n%s" %
-                    (src_file, dest_file, traceback.format_exc())
-                )
-
-            self.logger.debug(
-                "Linked file '%s' to '%s'." % (src_file, dest_file)
-            )
-            processed_files.append(dest_file)
-
-        return processed_files
-
-
-    def _delete_files(self, paths_to_delete):
-        """
-        This method handles deleting an item's path(s) from a designated location.
-
-        If the item has "sequence_paths" set, it will attempt to delete all paths
-        assuming they meet the required criteria.
-        """
-
-        publisher = self.parent
-
-        # ---- delete the work files from the publish location
-        processed_paths = []
-        for deletion_path in paths_to_delete:
-
-            # delete the path
-            if os.path.isdir(deletion_path):
-                filesystem.safe_delete_folder(deletion_path)
-                self.logger.debug("Deleted folder '%s'." % deletion_path)
-            else:
-                filesystem.safe_delete_file(deletion_path)
-                self.logger.debug("Deleted file '%s'." % deletion_path)
-
-            processed_paths.append(deletion_path)
-
-        return processed_paths
-
-
-    def _get_next_version_info(self, path):
-        """
-        Return the next version of the supplied path.
-
-        If templates are configured, use template logic. Otherwise, fall back to
-        the zero configuration, path_info hook logic.
-
-        :param str path: A path with a version number.
-        :param item: The current item being published
-
-        :return: A tuple of the form::
-
-            # the first item is the supplied path with the version bumped by 1
-            # the second item is the new version number
-            (next_version_path, version)
-        """
-
-        if not path:
-            self.logger.debug("Path is None. Can not determine version info.")
-            return None, None
-
-        publisher = self.parent
-
-        next_version_path = publisher.util.get_next_version_path(path)
-        cur_version = publisher.util.get_version_number(path)
-        if cur_version:
-            version = cur_version + 1
-        else:
-            version = None
-
-        return next_version_path, version
-
-
-    def _save_to_next_version(self, path, save_callback, *args, **kwargs):
-        """
-        Save the supplied path to the next version on disk.
-
-        :param path: The current path with a version number
-        :param item: The current item being published
-        :param save_callback: A callback to use to save the file
-
-        Relies on the _get_next_version_info() method to retrieve the next
-        available version on disk. If a version can not be detected in the path,
-        the method does nothing.
-
-        If the next version path already exists, logs a warning and does
-        nothing.
-
-        This method is typically used by subclasses that bump the current
-        working/session file after publishing.
-        """
-
-        publisher = self.parent
-        path = sgtk.util.ShotgunPath.normalize(path)
-
-        version_number = publisher.util.get_version_number(path)
-        if version_number is None:
-            self.logger.debug(
-                "No version number detected in the file path. "
-                "Skipping the bump file version step."
-            )
-            return None
-
-        self.logger.info("Incrementing file version number...")
-        next_version_path = publisher.util.get_next_version_path(path)
-
-        # nothing to do if the next version path can't be determined or if it
-        # already exists.
-        if not next_version_path:
-            self.logger.warning("Could not determine the next version path.")
-            return None
-
-        elif os.path.exists(next_version_path):
-            self.logger.warning(
-                "The next version of the path already exists",
-                extra={
-                    "action_show_folder": {
-                        "path": next_version_path
-                    }
-                }
-            )
-            return None
-
-        # save the file to the new path
-        save_callback(next_version_path, *args, **kwargs)
-        self.logger.info("File saved as: %s" % (next_version_path,))
-
-        return next_version_path

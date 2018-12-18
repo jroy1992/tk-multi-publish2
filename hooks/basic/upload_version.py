@@ -95,16 +95,6 @@ class UploadVersionPlugin(HookBaseClass):
         }
         return schema
 
-    def init_task_settings(self, item):
-        """
-        Method called by the publisher to determine the initial settings for the
-        instantiated task.
-
-        :param item: Item to process
-        :returns: dictionary of settings for this item's task
-        """
-        # Return the plugin settings
-        return self.plugin.settings
 
     def accept(self, task_settings, item):
         """
@@ -128,11 +118,7 @@ class UploadVersionPlugin(HookBaseClass):
 
         :returns: dictionary with boolean keys accepted, required and enabled
         """
-
-        # Run the parent acceptance method
-        accept_data = super(UploadVersionPlugin, self).accept(task_settings, item)
-        if not accept_data.get("accepted"):
-            return accept_data
+        accept_data = {}
 
         path = item.properties.get("path")
         if not path:
@@ -141,6 +127,7 @@ class UploadVersionPlugin(HookBaseClass):
 
         # return the accepted data
         return accept_data
+
 
     def validate(self, task_settings, item):
         """
@@ -156,6 +143,7 @@ class UploadVersionPlugin(HookBaseClass):
         :returns: True if item is valid, False otherwise.
         """
         return True
+
 
     def publish(self, task_settings, item):
         """
@@ -249,6 +237,7 @@ class UploadVersionPlugin(HookBaseClass):
 
         self.logger.info("Upload complete!")
 
+
     def finalize(self, task_settings, item):
         """
         Execute the finalization pass. This pass executes once all the publish
@@ -273,6 +262,7 @@ class UploadVersionPlugin(HookBaseClass):
                 }
             }
         )
+
 
     def _get_version_entity(self, item):
         """

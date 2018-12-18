@@ -10,8 +10,6 @@
 
 import mimetypes
 import os
-import datetime
-import urllib
 import pprint
 import sgtk
 from sgtk import TankError
@@ -235,9 +233,11 @@ class FileCollectorPlugin(HookBaseClass):
         # Set the item's work_path_template
         item.properties.work_path_template = self._resolve_work_path_template(settings, item)
 
-        # Set the item's fields property
-        item.properties.fields = self._resolve_item_fields(settings, item)
+        super(FileCollectorPlugin, self).on_context_changed(settings, item)
 
+
+    ############################################################################
+    # protected helper methods
 
     def _get_work_path_template_from_settings(self, settings, item_type, path):
         """
@@ -635,54 +635,6 @@ class FileCollectorPlugin(HookBaseClass):
         return item_info
 
 
-    def __get_parent_version_number_r(self, item):
-        """
-        Recurse up item hierarchy to determine version number
-        """
-        publisher = self.parent
-
-        # If this isn't the root item...
-        if not item.is_root:
-            # Try and get the version from the parent's fields
-            if "fields" in item.parent.properties:
-                version = item.parent.properties.fields.get("version")
-                if version:
-                    return version
-
-            # Next try and get the version from the parent's path
-            path = item.parent.properties.get("path")
-            if path:
-                version = publisher.util.get_version_number(path)
-                if version:
-                    return version
-
-            # Next try and get it from the parent's parent
-            version = self.__get_parent_version_number_r(item.parent)
-            if version:
-                return version
-
-        # Couldn't determine version number
-        return None
-
-
-    def __get_name_field_r(self, item):
-        """
-        Recurse up item hierarchy to determine the name field
-        """
-        if not item:
-            return None
-
-        if "fields" in item.properties:
-            name_field = item.properties.fields.get("name")
-            if name_field:
-                return name_field
-
-        if item.parent:
-            return self.__get_name_field_r(item.parent)
-
-        return None
-
-
     def _get_template_fields_from_path(self, item, template_name, path):
         """
         Get the fields by parsing the input path using the template derived from
@@ -731,27 +683,7 @@ class FileCollectorPlugin(HookBaseClass):
         """
         publisher = self.parent
 
-        fields = {}
-
-        # use %V - full view printout as default for the eye field
-        fields["eye"] = "%V"
-
-        # add in date values for YYYY, MM, DD
-        today = datetime.date.today()
-        fields["YYYY"] = today.year
-        fields["MM"] = today.month
-        fields["DD"] = today.day
-
-        # Try to set the name field
-        # First attempt to get it from the parent item
-        name_field = self.__get_name_field_r(item.parent)
-        if name_field:
-            fields["name"] = name_field
-
-        # Else attempt to use a sanitized task name
-        elif item.context.task:
-            name_field = item.context.task["name"]
-            fields["name"] = urllib.quote(name_field.replace(" ", "_").lower(), safe='')
+        fields = super(FileCollectorPlugin, self)._resolve_item_fields(settings, item)
 
         # Extra processing for items with files
         path = item.properties.get("path")
@@ -764,7 +696,18 @@ class FileCollectorPlugin(HookBaseClass):
             # If there is a valid work_path_template, attempt to get any fields from it
             work_path_template = item.properties.get("work_path_template")
             if work_path_template:
-                fields.update(self._get_template_fields_from_path(item, work_path_template, path))
+                tmpl_fields = self._get_template_fields_from_path(item, work_path_template, path)
+            else:
+                tmpl_fields = {}
+
+            # If version wasn't parsed by the template, try parsing the path manually
+            if "version" not in tmpl_fields:
+                version = publisher.util.get_version_number(path)
+                if version:
+                    tmpl_fields["version"] = version
+
+            # Update the fields dict with the template fields
+            fields.update(tmpl_fields)
 
             # If not already populated, attempt to get the width and height from the image
             image_type = item.type.split(".")[1]
@@ -795,10 +738,6 @@ class FileCollectorPlugin(HookBaseClass):
                     except ImportError as e:
                         self.logger.warning(str(e) + ". Cannot determine width/height from %s." % path)
 
-            # If version wasn't parsed by the template, try parsing the path manually
-            if "version" not in fields:
-                fields["version"] = publisher.util.get_version_number(path)
-
             # Get the file extension if not already defined
             if "extension" not in fields:
                 file_info = publisher.util.get_file_path_components(path)
@@ -807,11 +746,6 @@ class FileCollectorPlugin(HookBaseClass):
             # Force use of %d format
             if item.properties.get("is_sequence", False):
                 fields["SEQ"] = "FORMAT: %d"
-
-        # If a version number isn't already defined...
-        if "version" not in fields:
-            # Recurse up the item hierarchy to see if a parent specifies one
-            fields["version"] = self.__get_parent_version_number_r(item)
 
         return fields
 

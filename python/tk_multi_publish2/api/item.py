@@ -289,7 +289,7 @@ class PublishItem(object):
         """
         self._tasks = []
 
-    def create_item(self, type_spec, type_display, name, collector=None, context=None, properties={}):
+    def create_item(self, type_spec, type_display, name, context=None, properties={}):
         """
         Factory method for generating new items.
 

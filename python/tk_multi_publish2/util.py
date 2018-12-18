@@ -117,6 +117,134 @@ def get_next_version_path(path):
     )
 
 
+def get_next_version_info(path):
+    """
+    Return the next version of the supplied path.
+
+    If templates are configured, use template logic. Otherwise, fall back to
+    the zero configuration, path_info hook logic.
+
+    :param str path: A path with a version number.
+    :param item: The current item being published
+
+    :return: A tuple of the form::
+
+        # the first item is the supplied path with the version bumped by 1
+        # the second item is the new version number
+        (next_version_path, version)
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "get_next_version_info",
+        path=path
+    )
+
+
+def save_to_next_version(path, save_callback, *args, **kwargs):
+    """
+    Save the supplied path to the next version on disk.
+
+    :param path: The current path with a version number
+    :param item: The current item being published
+    :param save_callback: A callback to use to save the file
+
+    Relies on the get_next_version_info() method to retrieve the next
+    available version on disk. If a version can not be detected in the path,
+    the method does nothing.
+
+    If the next version path already exists, logs a warning and does
+    nothing.
+
+    This method is typically used by subclasses that bump the current
+    working/session file after publishing.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "save_to_next_version",
+        path,
+        save_callback,
+        *args,
+        **kwargs
+    )
+
+
+def copy_files(src_files, dest_path, is_sequence=False):
+    """
+    This method handles copying an item's path(s) to a designated location.
+
+    If the item has "sequence_paths" set, it will attempt to copy all paths
+    assuming they meet the required criteria.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "copy_files",
+        src_files,
+        dest_path,
+        is_sequence=is_sequence
+    )
+
+
+def symlink_files(src_files, dest_path, is_sequence=False):
+    """
+    This method handles symlink an item's publish_path to publish_symlink_path,
+    assuming publish_symlink_path is already populated.
+
+    If the item has "sequence_paths" set, it will attempt to symlink all paths
+    assuming they meet the required criteria.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "symlink_files",
+        src_files,
+        dest_path,
+        is_sequence=is_sequence
+    )
+
+
+def delete_files(paths_to_delete):
+    """
+    This method handles deleting an item's path(s) from a designated location.
+
+    If the item has "sequence_paths" set, it will attempt to delete all paths
+    assuming they meet the required criteria.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "delete_files",
+        paths_to_delete
+    )
+
+
 def get_file_path_components(path):
     """
     Convenience method for determining file components for a given path.

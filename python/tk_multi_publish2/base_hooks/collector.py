@@ -8,10 +8,10 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import copy
 import sgtk
 
 from .base import PluginBase
+
 
 class CollectorPlugin(PluginBase):
     """
@@ -20,20 +20,6 @@ class CollectorPlugin(PluginBase):
     file browser or dragged and dropped into the Publish2 UI. It is also used
     to gather items to be published within the current DCC session.
     """
-
-    @property
-    def id(self):
-        """
-        Unique string identifying this plugin.
-        """
-        return self._id
-
-    @id.setter
-    def id(self, new_id):
-        """
-        Allows to set the unique string identifying this plugin.
-        """
-        self._id = new_id
 
     ############################################################################
     # Collector properties
@@ -107,16 +93,6 @@ class CollectorPlugin(PluginBase):
                 "type": "dict",
                 "values": {
                     "type": "dict",
-                    "items": {
-                        "icon_path": {
-                            "type": "config_path",
-                            "description": ""
-                        },
-                        "type_display": {
-                            "type": "str",
-                            "description": ""
-                        }
-                    },
                 },
                 "default_value": {},
                 "description": (
@@ -267,72 +243,3 @@ class CollectorPlugin(PluginBase):
             whose :class:`sgtk.Context` has been updated.
         """
         raise NotImplementedError
-
-
-    ############################################################################
-    # protected helper methods
-
-    def _add_item(self, settings, parent_item, item_name, item_type, context=None, properties=None):
-        """
-        Creates a generic item
-
-        :param dict settings: Configured settings for this collector
-        :param parent_item: parent item instance
-        :param item_name: The name of the item instance
-        :param item_type: The type of the item instance
-        :param context: The :class:`sgtk.Context` to set for the item
-        :param properties: The dict of initial properties for the item
-
-        :returns: The item that was created and its item_info dictionary
-        """
-        publisher = self.parent
-
-        # Get this item's info from the settings object
-        item_info = self._get_item_type_info(settings, item_type)
-
-        type_display = item_info["type_display"]
-        icon_path    = item_info["icon_path"]
-
-        # create and populate the item
-        item = parent_item.create_item(
-            item_type,
-            type_display,
-            item_name,
-            collector=self.plugin,
-            context=context,
-            properties=properties
-        )
-
-        # construct a full path to the icon given the name defined above
-        icon_path = publisher.expand_path(icon_path)
-
-        # Set the icon path
-        item.set_icon_from_path(icon_path)
-
-        return item
-
-
-    def _get_item_type_info(self, settings, item_type):
-        """
-        Return the dictionary corresponding to this item's 'Item Types' settings.
-
-        :param dict settings: Configured settings for this collector
-        :param item_type: The type of Item to identify info for
-
-        :return: A dictionary of information about the item to create::
-
-            # item_type = "mari.session"
-
-            {
-                "type_display": "Mari Session",
-                "icon_path": "/path/to/some/icons/folder/mari.png",
-            }
-        """
-        # default values used if no specific type can be determined
-        default_item_info = {
-            'type_display' : 'Item',
-            'icon_path' : '{self}/hooks/icons/file.png'
-        }
-
-        item_types = copy.deepcopy(settings["Item Types"].value)
-        return item_types.get(item_type, default_item_info)

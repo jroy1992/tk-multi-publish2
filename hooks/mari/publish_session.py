@@ -18,8 +18,8 @@ from sgtk.util.filesystem import ensure_folder_exists
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
-
-MARI_SESSION_ITEM_TYPE_SETTINGS = {
+SESSION_ITEM_TYPE_FILTERS = ["mari.session"]
+SESSION_ITEM_TYPE_SETTINGS = {
     "mari.session": {
         "publish_type": "Mari Session",
         "publish_name_template": None,
@@ -27,59 +27,10 @@ MARI_SESSION_ITEM_TYPE_SETTINGS = {
     }
 }
 
-class MariPublishSessionPlugin(HookBaseClass):
+class MariSessionPublishPlugin(HookBaseClass):
     """
-    Inherits from PublishFilesPlugin
+    Inherits from SessionPublishPlugin
     """
-    @property
-    def name(self):
-        """
-        One line display name describing the plugin
-        """
-        return "Publish Mari Session"
-
-    @property
-    def settings_schema(self):
-        """
-        Dictionary defining the settings that this plugin expects to receive
-        through the settings parameter in the accept, validate, publish and
-        finalize methods.
-
-        A dictionary on the following form::
-
-            {
-                "Settings Name": {
-                    "type": "settings_type",
-                    "default_value": "default_value",
-                    "description": "One line description of the setting"
-            }
-
-        The type string should be one of the data types that toolkit accepts
-        as part of its environment configuration.
-        """
-        schema = super(MariPublishSessionPlugin, self).settings_schema
-        schema["Item Type Filters"]["default_value"] = ["mari.session"]
-        schema["Item Type Settings"]["default_value"] = MARI_SESSION_ITEM_TYPE_SETTINGS
-        return schema
-
-
-    def publish(self, task_settings, item):
-        """
-        Executes the publish logic for the given item and settings.
-
-        :param task_settings: Dictionary of Settings. The keys are strings, matching
-            the keys returned in the settings property. The values are `Setting`
-            instances.
-        :param item: Item to process
-        """
-        self.logger.info("Saving the current project...")
-        mari.projects.current().save()
-
-        # Store any publish dependencies
-        item.properties.publish_dependency_ids = self._get_dependency_ids()
-
-        return super(MariPublishSessionPlugin, self).publish(task_settings, item)
-
 
     def finalize(self, task_settings, item):
         """
@@ -91,7 +42,7 @@ class MariPublishSessionPlugin(HookBaseClass):
             instances.
         :param item: Item to process
         """
-        super(MariPublishSessionPlugin, self).finalize(task_settings, item)
+        super(MariSessionPublishPlugin, self).finalize(task_settings, item)
 
         # version up the session if the publish went through successfully.
         if item.properties.get("sg_publish_data_list"):
@@ -102,7 +53,7 @@ class MariPublishSessionPlugin(HookBaseClass):
             self.parent.engine.set_project_version(item.properties.project, next_version)
 
             # Save the session
-            mari.projects.current().save()
+            self._save_session("", item)
 
 
     def publish_files(self, task_settings, item, publish_path):
@@ -140,9 +91,24 @@ class MariPublishSessionPlugin(HookBaseClass):
         return [path]
 
 
-    def _get_dependency_ids(self):
+    def _get_dependency_paths(self, node=None):
         """
-        Find additional dependencies for the session
+        Find all dependency paths for the current node. If no node specified,
+        will return all dependency paths for the session.
+
+        :param node: Optional node to process
+        :return: List of upstream dependency paths
+        """
+        return None
+
+
+    def _get_dependency_ids(self, node=None):
+        """
+        Find all dependency ids for the current node. If no node specified,
+        will return all dependency ids for the session.
+
+        :param node: Optional node to process
+        :return: List of upstream dependency ids
         """
         publish_ids = []
 
@@ -164,3 +130,11 @@ class MariPublishSessionPlugin(HookBaseClass):
             publish_ids.append(geo_version_publish_id)
 
         return publish_ids
+
+
+    def _save_session(self, path, item):
+        """
+        Save the current session.
+        """
+        # Save the session
+        item.properties.project.save()

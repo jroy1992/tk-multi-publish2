@@ -189,6 +189,117 @@ class PublishPlugin(HookBaseClass):
     # standard publish plugin methods
 
 
+    def init_task_settings(self, item):
+        """
+        Method called by the publisher to determine the initial settings for the
+        instantiated task.
+
+        :param item: The parent item of the task
+        :returns: dictionary of settings for this item's task
+        """
+        # Return the item-type specific settings
+        if item.type not in self.plugin.settings["Item Type Settings"]:
+            msg = "Key: %s\n%s" % (item.type, pprint.pformat(self.plugin.settings["Item Type Settings"]))
+            self.logger.warning(
+                "'Item Type Settings' are missing for item type: '%s'" % item.type,
+                extra={
+                    "action_show_more_info": {
+                        "label": "Show Info",
+                        "tooltip": "Show more info",
+                        "text": msg
+                    }
+                }
+            )
+            return {}
+        return self.plugin.settings["Item Type Settings"].get(item.type)
+
+
+    def accept(self, task_settings, item):
+        """
+        This method is called by the publisher to see if the plugin accepts the
+        supplied item for processing.
+
+        Only items matching the filters defined via the :data:`item_filters`
+        property will be presented to this method.
+
+        A publish task will be generated for each item accepted here.
+
+        This method returns a :class:`dict` of the following form::
+
+            {
+                "accepted": <bool>,
+                "enabled": <bool>,
+                "visible": <bool>,
+                "checked": <bool>,
+            }
+
+        The keys correspond to the acceptance state of the supplied item. Not
+        all keys are required. The keys are defined as follows:
+
+        * ``accepted``: Indicates if the plugin is interested in this value at all.
+          If ``False``, no task will be created for this plugin. Required.
+        * ``enabled``: If ``True``, the created task will be enabled in the UI,
+          otherwise it will be disabled (no interaction allowed). Optional,
+          ``True`` by default.
+        * ``visible``: If ``True``, the created task will be visible in the UI,
+          otherwise it will be hidden. Optional, ``True`` by default.
+        * ``checked``: If ``True``, the created task will be checked in the UI,
+          otherwise it will be unchecked. Optional, ``True`` by default.
+
+        In addition to the item, the configured settings for this plugin are
+        supplied. The information provided by each of these arguments can be
+        used to decide whether to accept the item.
+
+        For example, the item's ``properties`` :class:`dict` may house meta data
+        about the item, populated during collection. This data can be used to
+        inform the acceptance logic.
+
+        Example implementation:
+
+        .. code-block:: python
+
+            def accept(self, task_settings, item):
+
+                accept = True
+
+                # get the path for the item as set during collection
+                path = item.properties["path"]
+
+                # ensure the file is not too big
+                size_in_bytes = os.stat(path).st_stize
+                if size_in_bytes > math.pow(10, 9): # 1 GB
+                    self.logger.warning("File is too big (> 1 GB)!")
+                    accept = False
+
+                return {"accepted": accepted}
+
+        :param dict task_settings: The keys are strings, matching the keys returned
+            in the :data:`settings` property. The values are
+            :ref:`publish-api-setting` instances.
+        :param item: The :ref:`publish-api-item` instance to process for
+            acceptance.
+
+        :returns: dictionary with boolean keys accepted, required and enabled
+        """
+        accept_data = {}
+
+        # Only accept this item if we have its task settings dict
+        if not task_settings:
+            msg = "Unable to find task_settings for plugin: %s" % self.name
+            accept_data["extra_info"] = {
+                "action_show_more_info": {
+                    "label": "Show Info",
+                    "tooltip": "Show more info",
+                    "text": msg
+                }
+            }
+            accept_data["accepted"] = False
+        else:
+            accept_data["accepted"] = True
+
+        return accept_data
+
+
     def validate(self, task_settings, item):
         """
         Validates the given item to check that it is ok to publish.
@@ -539,6 +650,8 @@ class PublishPlugin(HookBaseClass):
         :param item: Item to process
         :param publish_path: The output path to publish files to
         """
+        publisher = self.parent
+
         path = item.properties.get("path")
         if not path:
             raise KeyError("Base class implementation of publish_files() method requires a 'path' property.")
@@ -550,7 +663,7 @@ class PublishPlugin(HookBaseClass):
         else:
             work_files = [path]
 
-        return self._copy_files(work_files, publish_path, is_sequence)
+        return publisher.util.copy_files(work_files, publish_path, is_sequence)
 
 
     def symlink_publishes(self, task_settings, item):
@@ -572,7 +685,7 @@ class PublishPlugin(HookBaseClass):
             src_files = [publish_path]
             is_sequence = False
 
-        return self._symlink_files(src_files, symlink_path, is_sequence)
+        return publisher.util.symlink_files(src_files, symlink_path, is_sequence)
 
 
     def delete_files(self, task_settings, item, deletion_path):
@@ -588,7 +701,7 @@ class PublishPlugin(HookBaseClass):
         else:
             files_to_delete = [deletion_path]
 
-        return self._delete_files(files_to_delete)
+        return publisher.util.delete_files(files_to_delete)
 
 
     ############################################################################

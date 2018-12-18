@@ -83,7 +83,7 @@ DEFAULT_ITEM_TYPE_SETTINGS = {
     },
 }
 
-class PublishFilesPlugin(HookBaseClass):
+class FilePublishPlugin(HookBaseClass):
     """
     Plugin for creating generic publishes in Shotgun.
 
@@ -151,7 +151,7 @@ class PublishFilesPlugin(HookBaseClass):
         The type string should be one of the data types that toolkit accepts
         as part of its environment configuration.
         """
-        schema = super(PublishFilesPlugin, self).settings_schema
+        schema = super(FilePublishPlugin, self).settings_schema
         schema["Item Type Filters"]["default_value"].append("file.*")
         schema["Item Type Settings"]["default_value"].update(DEFAULT_ITEM_TYPE_SETTINGS)
         return schema
@@ -187,7 +187,7 @@ class PublishFilesPlugin(HookBaseClass):
         """
 
         # Run the parent acceptance method
-        accept_data = super(PublishFilesPlugin, self).accept(task_settings, item)
+        accept_data = super(FilePublishPlugin, self).accept(task_settings, item)
         if not accept_data.get("accepted"):
             return accept_data
 
@@ -233,4 +233,4 @@ class PublishFilesPlugin(HookBaseClass):
                     self.logger.warning("File does not exist: %s" % item.properties.path)
                     return False
 
-        return super(PublishFilesPlugin, self).validate(task_settings, item)
+        return super(FilePublishPlugin, self).validate(task_settings, item)

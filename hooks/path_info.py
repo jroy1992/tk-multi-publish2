@@ -10,9 +10,12 @@
 
 import os
 import re
+import stat
+import traceback
 import glob
 
 import sgtk
+from sgtk.util import filesystem
 from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
@@ -531,3 +534,221 @@ class BasicPathInfo(HookBaseClass):
 
         logger.debug("Returning next version path: %s" % (next_version_path,))
         return next_version_path
+
+    def get_next_version_info(self, path):
+        """
+        Return the next version of the supplied path.
+
+        If templates are configured, use template logic. Otherwise, fall back to
+        the zero configuration, path_info hook logic.
+
+        :param str path: A path with a version number.
+        :param item: The current item being published
+
+        :return: A tuple of the form::
+
+            # the first item is the supplied path with the version bumped by 1
+            # the second item is the new version number
+            (next_version_path, version)
+        """
+        publisher = self.parent
+
+        logger = publisher.logger
+
+        if not path:
+            logger.debug("Path is None. Can not determine version info.")
+            return None, None
+
+        next_version_path = self.get_next_version_path(path)
+        cur_version = self.get_version_number(path)
+        if cur_version:
+            version = cur_version + 1
+        else:
+            version = None
+
+        return next_version_path, version
+
+    def save_to_next_version(self, path, save_callback, *args, **kwargs):
+        """
+        Save the supplied path to the next version on disk.
+
+        :param path: The current path with a version number
+        :param save_callback: A callback to use to save the file
+
+        Relies on the get_next_version_info() method to retrieve the next
+        available version on disk. If a version can not be detected in the path,
+        the method does nothing.
+
+        If the next version path already exists, revs to the next available version.
+
+        This method is typically used by subclasses that bump the current
+        working/session file after publishing.
+        """
+        publisher = self.parent
+
+        logger = publisher.logger
+        path = sgtk.util.ShotgunPath.normalize(path)
+
+        version_number = self.get_version_number(path)
+        if version_number is None:
+            logger.debug(
+                "No version number detected in the file path. "
+                "Skipping the bump file version step."
+            )
+            return None
+
+        logger.info("Incrementing file version number...")
+        next_version_path = self.get_next_version_path(path)
+
+        # nothing to do if the next version path can't be determined or if it
+        # already exists.
+        if not next_version_path:
+            logger.warning("Could not determine the next version path.")
+            return None
+
+        elif os.path.exists(next_version_path):
+
+            # determine the next available version_number. just keep asking for
+            # the next one until we get one that doesn't exist.
+            while os.path.exists(next_version_path):
+                next_version_path = self.get_next_version_path(next_version_path)
+
+            # now extract the version number of the next available to display
+            # to the user
+            next_version = self.get_version_number(next_version_path)
+
+            logger.warning(
+                "The next version of this file already exists on disk. "
+                "Saving to the next available version number, v%s" % (next_version,),
+                extra={
+                    "action_show_folder": {
+                        "path": next_version_path
+                    }
+                }
+            )
+
+        # save the file to the new path
+        save_callback(next_version_path, *args, **kwargs)
+        logger.info("File saved as: %s" % (next_version_path,))
+
+        return next_version_path
+
+    def copy_files(self, src_files, dest_path, is_sequence=False):
+        """
+        This method handles copying an item's path(s) to a designated location.
+
+        If the item has "sequence_paths" set, it will attempt to copy all paths
+        assuming they meet the required criteria.
+        """
+
+        publisher = self.parent
+
+        logger = publisher.logger
+
+        # ---- copy the src files to the dest location
+        processed_files = []
+        for src_file in src_files:
+
+            if is_sequence:
+                frame_num = self.get_frame_number(src_file)
+                dest_file = self.get_path_for_frame(dest_path, frame_num)
+            else:
+                dest_file = dest_path
+
+            # If the file paths are the same, lock permissions
+            if src_file == dest_file:
+                filesystem.freeze_permissions(dest_file)
+                continue
+
+            # copy the file
+            try:
+                dest_folder = os.path.dirname(dest_file)
+                filesystem.ensure_folder_exists(dest_folder)
+                filesystem.copy_file(src_file, dest_file,
+                          permissions=stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
+                          seal=True)
+            except Exception as e:
+                raise Exception(
+                    "Failed to copy file from '%s' to '%s'.\n%s" %
+                    (src_file, dest_file, traceback.format_exc())
+                )
+
+            logger.debug(
+                "Copied file '%s' to '%s'." % (src_file, dest_file)
+            )
+            processed_files.append(dest_file)
+
+        return processed_files
+
+    def symlink_files(self, src_files, dest_path, is_sequence=False):
+        """
+        This method handles symlink an item's publish_path to publish_symlink_path,
+        assuming publish_symlink_path is already populated.
+
+        If the item has "sequence_paths" set, it will attempt to symlink all paths
+        assuming they meet the required criteria.
+        """
+
+        publisher = self.parent
+
+        logger = publisher.logger
+
+        # ---- symlink the publish files to the publish symlink path
+        processed_files = []
+        for src_file in src_files:
+
+            if is_sequence:
+                frame_num = self.get_frame_number(src_file)
+                dest_file = self.get_path_for_frame(dest_path, frame_num)
+            else:
+                dest_file = dest_path
+
+            # If the file paths are the same, skip...
+            if src_file == dest_file:
+                continue
+
+            # symlink the file
+            try:
+                dest_folder = os.path.dirname(dest_file)
+                filesystem.ensure_folder_exists(dest_folder)
+                filesystem.symlink_file(src_file, dest_file)
+            except Exception as e:
+                raise Exception(
+                    "Failed to link file from '%s' to '%s'.\n%s" %
+                    (src_file, dest_file, traceback.format_exc())
+                )
+
+            logger.debug(
+                "Linked file '%s' to '%s'." % (src_file, dest_file)
+            )
+            processed_files.append(dest_file)
+
+        return processed_files
+
+    def delete_files(self, paths_to_delete):
+        """
+        This method handles deleting an item's path(s) from a designated location.
+
+        If the item has "sequence_paths" set, it will attempt to delete all paths
+        assuming they meet the required criteria.
+        """
+
+        publisher = self.parent
+
+        logger = publisher.logger
+
+        # ---- delete the work files from the publish location
+        processed_paths = []
+        for deletion_path in paths_to_delete:
+
+            # delete the path
+            if os.path.isdir(deletion_path):
+                filesystem.safe_delete_folder(deletion_path)
+                logger.debug("Deleted folder '%s'." % deletion_path)
+            else:
+                filesystem.safe_delete_file(deletion_path)
+                logger.debug("Deleted file '%s'." % deletion_path)
+
+            processed_paths.append(deletion_path)
+
+        return processed_paths
