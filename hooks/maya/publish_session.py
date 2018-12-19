@@ -17,19 +17,19 @@ from sgtk.util.filesystem import ensure_folder_exists
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
-SESSION_ITEM_TYPE_FILTERS = ["maya.session"]
-SESSION_ITEM_TYPE_SETTINGS = {
-    "maya.session": {
-        "publish_type": "Maya Scene",
-        "publish_name_template": None,
-        "publish_path_template": None
-    }
-}
-
 class MayaSessionPublishPlugin(HookBaseClass):
     """
     Inherits from SessionPublishPlugin
     """
+
+    SESSION_ITEM_TYPE_FILTERS = ["maya.session"]
+    SESSION_ITEM_TYPE_SETTINGS = {
+        "maya.session": {
+            "publish_type": "Maya Scene",
+            "publish_name_template": None,
+            "publish_path_template": None
+        }
+    }
 
     def _get_dependency_paths(self, node=None):
         """
@@ -74,17 +74,6 @@ class MayaSessionPublishPlugin(HookBaseClass):
         return list(ref_paths)
 
 
-    def _get_dependency_ids(self, node=None):
-        """
-        Find all dependency ids for the current node. If no node specified,
-        will return all dependency ids for the session.
-
-        :param node: Optional node to process
-        :return: List of upstream dependency ids
-        """
-        return None
-
-
     def _save_session(self, path, item):
         """
         Save the current session to the supplied path.
@@ -106,3 +95,6 @@ class MayaSessionPublishPlugin(HookBaseClass):
             cmds.file(save=True, force=True, type=maya_file_type)
         else:
             cmds.file(save=True, force=True)
+
+        # Save the updated property
+        item.properties.path = path

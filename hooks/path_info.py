@@ -568,7 +568,7 @@ class BasicPathInfo(HookBaseClass):
 
         return next_version_path, version
 
-    def save_to_next_version(self, path, save_callback, *args, **kwargs):
+    def save_to_next_version(self, path, save_callback, **kwargs):
         """
         Save the supplied path to the next version on disk.
 
@@ -628,7 +628,7 @@ class BasicPathInfo(HookBaseClass):
             )
 
         # save the file to the new path
-        save_callback(next_version_path, *args, **kwargs)
+        save_callback(next_version_path, **kwargs)
         logger.info("File saved as: %s" % (next_version_path,))
 
         return next_version_path

@@ -14,13 +14,14 @@ import sgtk
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
-SESSION_ITEM_TYPE_FILTERS = []
-SESSION_ITEM_TYPE_SETTINGS = {}
-
 class SessionPublishPlugin(HookBaseClass):
     """
     Inherits from PublishPlugin
     """
+
+    SESSION_ITEM_TYPE_FILTERS = []
+    SESSION_ITEM_TYPE_SETTINGS = {}
+
     @property
     def name(self):
         """
@@ -71,9 +72,70 @@ class SessionPublishPlugin(HookBaseClass):
         as part of its environment configuration.
         """
         schema = super(SessionPublishPlugin, self).settings_schema
-        schema["Item Type Filters"]["default_value"] = SESSION_ITEM_TYPE_FILTERS
-        schema["Item Type Settings"]["default_value"] = SESSION_ITEM_TYPE_SETTINGS
+        schema["Item Type Filters"]["default_value"] = self.SESSION_ITEM_TYPE_FILTERS
+        schema["Item Type Settings"]["default_value"] = self.SESSION_ITEM_TYPE_SETTINGS
         return schema
+
+
+    def validate(self, task_settings, item):
+        """
+        Validates the given item to check that it is ok to publish. Returns a
+        boolean to indicate validity.
+
+        :param task_settings: Dictionary of Settings. The keys are strings, matching
+            the keys returned in the settings property. The values are `Setting`
+            instances.
+        :param item: Item to process
+        :returns: True if item is valid, False otherwise.
+        """
+        publisher = self.parent
+
+        retval = super(SessionPublishPlugin, self).validate(task_settings, item)
+        if not retval:
+            return retval
+
+        path = item.properties.get("path")
+        if path:
+            path_version = publisher.util.get_version_number(path)
+            publish_version = item.properties.publish_version
+
+            # If the publish version is different (greater) than the current workfile version
+            # then we should version up the workfile to match
+            version = path_version
+            if version < publish_version:
+                err_msg = "Publish version mismatch: Session v%s != Publish v%s." % \
+                    (path_version, publish_version)
+                while version < publish_version:
+                    path = publisher.util.get_next_version_path(path)
+                    if not path:
+                        break
+                    version = publisher.util.get_version_number(path)
+
+                if os.path.exists(path):
+                    self.logger.error(err_msg +
+                        " Version v%s of this file already exists on disk." % path_version,
+                        extra={
+                            "action_show_folder": {
+                                "path": path
+                            }
+                        }
+                    )
+                    return False
+
+                self.logger.error(
+                    err_msg,
+                    extra={
+                        "action_button": {
+                            "label": "Save to v%s" % (version,),
+                            "tooltip": "Save session to match the publish version number: "
+                                       "v%s" % (version,),
+                            "callback": lambda: self._save_session(path, item)
+                        }
+                    }
+                )
+                return False
+
+        return True
 
 
     def publish(self, task_settings, item):
@@ -111,14 +173,14 @@ class SessionPublishPlugin(HookBaseClass):
         super(SessionPublishPlugin, self).finalize(task_settings, item)
 
         # version up the scene file if the publish went through successfully.
-        path = item.properties.get("path"):
+        path = item.properties.get("path")
         if path and item.properties.get("sg_publish_data_list"):
 
             # insert the next version path into the properties
             item.properties.next_version_path = publisher.util.save_to_next_version(
-                path,
-                self._save_session,
-                item
+                path=path,
+                save_callback=self._save_session,
+                item=item
             )
 
 
@@ -130,7 +192,7 @@ class SessionPublishPlugin(HookBaseClass):
         :param node: Optional node to process
         :return: List of upstream dependency paths
         """
-        raise NotImplementedError
+        return []
 
 
     def _get_dependency_ids(self, node=None):
@@ -141,7 +203,7 @@ class SessionPublishPlugin(HookBaseClass):
         :param node: Optional node to process
         :return: List of upstream dependency ids
         """
-        raise NotImplementedError
+        return []
 
 
     def _save_session(self, path, item):

@@ -41,20 +41,17 @@ class CollectorPlugin(HookBaseClass):
         The type string should be one of the data types that toolkit accepts as
         part of its environment configuration.
         """
-        schema = super(FileCollectorPlugin, self).settings_schema
-        schema["Item Types"]["default_value"] = self.common_file_info
-        schema["Item Types"]["values"]["items"].update(
-            {
-                "icon_path": {
-                    "type": "config_path",
-                    "description": ""
-                },
-                "type_display": {
-                    "type": "str",
-                    "description": ""
-                }
+        schema = super(CollectorPlugin, self).settings_schema
+        schema["Item Types"]["values"]["items"] = {
+            "icon_path": {
+                "type": "config_path",
+                "description": ""
+            },
+            "type_display": {
+                "type": "str",
+                "description": ""
             }
-        )
+        }
         return schema
 
 

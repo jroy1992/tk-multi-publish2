@@ -18,19 +18,20 @@ from sgtk.util.filesystem import ensure_folder_exists
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
-SESSION_ITEM_TYPE_FILTERS = ["mari.session"]
-SESSION_ITEM_TYPE_SETTINGS = {
-    "mari.session": {
-        "publish_type": "Mari Session",
-        "publish_name_template": None,
-        "publish_path_template": None
-    }
-}
 
 class MariSessionPublishPlugin(HookBaseClass):
     """
     Inherits from SessionPublishPlugin
     """
+
+    SESSION_ITEM_TYPE_FILTERS = ["mari.session"]
+    SESSION_ITEM_TYPE_SETTINGS = {
+        "mari.session": {
+            "publish_type": "Mari Session",
+            "publish_name_template": None,
+            "publish_path_template": None
+        }
+    }
 
     def finalize(self, task_settings, item):
         """
@@ -89,17 +90,6 @@ class MariSessionPublishPlugin(HookBaseClass):
 
         self.logger.info("Published session item '%s' to '%s'." % (item.name, path))
         return [path]
-
-
-    def _get_dependency_paths(self, node=None):
-        """
-        Find all dependency paths for the current node. If no node specified,
-        will return all dependency paths for the session.
-
-        :param node: Optional node to process
-        :return: List of upstream dependency paths
-        """
-        return None
 
 
     def _get_dependency_ids(self, node=None):

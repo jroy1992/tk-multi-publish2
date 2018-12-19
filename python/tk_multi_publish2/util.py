@@ -146,7 +146,7 @@ def get_next_version_info(path):
     )
 
 
-def save_to_next_version(path, save_callback, *args, **kwargs):
+def save_to_next_version(path, save_callback, **kwargs):
     """
     Save the supplied path to the next version on disk.
 
@@ -173,9 +173,8 @@ def save_to_next_version(path, save_callback, *args, **kwargs):
     return publisher.execute_hook_method(
         "path_info",
         "save_to_next_version",
-        path,
-        save_callback,
-        *args,
+        path=path,
+        save_callback=save_callback,
         **kwargs
     )
 
@@ -196,8 +195,8 @@ def copy_files(src_files, dest_path, is_sequence=False):
     return publisher.execute_hook_method(
         "path_info",
         "copy_files",
-        src_files,
-        dest_path,
+        src_files=src_files,
+        dest_path=dest_path,
         is_sequence=is_sequence
     )
 
@@ -219,8 +218,8 @@ def symlink_files(src_files, dest_path, is_sequence=False):
     return publisher.execute_hook_method(
         "path_info",
         "symlink_files",
-        src_files,
-        dest_path,
+        src_files=src_files,
+        dest_path=dest_path,
         is_sequence=is_sequence
     )
 
@@ -241,7 +240,7 @@ def delete_files(paths_to_delete):
     return publisher.execute_hook_method(
         "path_info",
         "delete_files",
-        paths_to_delete
+        paths_to_delete=paths_to_delete
     )
 
 

@@ -889,15 +889,23 @@ class PublishPlugin(HookBaseClass):
         publish_name = item.properties.publish_name
         publish_type = item.properties.publish_type
 
-        # First find existing publishes to determine the latest published version number
+        # First find existing publishes to determine if this version has already been published
         existing_publishes = self._find_publishes(self.parent.context, publish_name, publish_type)
-        publish_version = max([p["version_number"] for p in existing_publishes] or [0]) + 1
+        publish_versions = [p["version_number"] for p in existing_publishes]
 
         # The get the version number from the path, if defined
-        file_version = int(item.properties.fields.get("version", 0))
+        version = int(item.properties.fields.get("version", 1))
 
-        # Return the max version between the publish and file on disk
-        return max(file_version, publish_version)
+        # Find the first value equal to or greater than the file version that doesn't already exist
+        while True:
+            try:
+                publish_versions.index(version)
+            except ValueError:
+                break
+            else:
+                version += 1
+
+        return version
 
 
     def _find_publishes(self, ctx, publish_name, publish_type):

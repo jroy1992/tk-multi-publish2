@@ -17,15 +17,6 @@ from sgtk.util.filesystem import ensure_folder_exists
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
-SESSION_ITEM_TYPE_FILTERS = ["nuke.session"]
-SESSION_ITEM_TYPE_SETTINGS = {
-    "nuke.session": {
-        "publish_type": "Nuke Script",
-        "publish_name_template": None,
-        "publish_path_template": None
-    }
-}
-
 # A list of input node types to check as dependencies
 _NUKE_INPUTS = ("Read", "ReadGeo2", "Camera2")
 
@@ -33,6 +24,15 @@ class NukePublishSessionPlugin(HookBaseClass):
     """
     Inherits from SessionPublishPlugin
     """
+
+    SESSION_ITEM_TYPE_FILTERS = ["nuke.session"]
+    SESSION_ITEM_TYPE_SETTINGS = {
+        "nuke.session": {
+            "publish_type": "Nuke Script",
+            "publish_name_template": None,
+            "publish_path_template": None
+        }
+    }
 
     def _get_dependency_paths(self, node=None):
         """
@@ -82,23 +82,15 @@ class NukePublishSessionPlugin(HookBaseClass):
         return dependency_paths
 
 
-    def _get_dependency_ids(self, node=None):
-        """
-        Find all dependency ids for the current node. If no node specified,
-        will return all dependency ids for the session.
-
-        :param node: Optional node to process
-        :return: List of upstream dependency ids
-        """
-        return None
-
-
     def _save_session(self, path, item):
         """
         Save the current session to the supplied path.
         """
         ensure_folder_exists(os.path.dirname(path))
         nuke.scriptSaveAs(path, True)
+
+        # Save the updated property
+        item.properties.path = path
 
 
 def _collect_dep_nodes(node, visited, dep_nodes):

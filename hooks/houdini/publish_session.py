@@ -14,15 +14,6 @@ import sgtk
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
-SESSION_ITEM_TYPE_FILTERS = ["houdini.session"]
-SESSION_ITEM_TYPE_SETTINGS = {
-    "houdini.session": {
-        "publish_type": "Houdini Scene",
-        "publish_name_template": None,
-        "publish_path_template": None
-    }
-}
-
 # A list of input node types to check as dependencies
 # A dict of dicts organized by category, type and output file parm
 _HOUDINI_INPUTS = {
@@ -36,6 +27,15 @@ class HoudiniSessionPublishPlugin(HookBaseClass):
     """
     Inherits from SessionPublishPlugin
     """
+
+    SESSION_ITEM_TYPE_FILTERS = ["houdini.session"]
+    SESSION_ITEM_TYPE_SETTINGS = {
+        "houdini.session": {
+            "publish_type": "Houdini Scene",
+            "publish_name_template": None,
+            "publish_path_template": None
+        }
+    }
 
     def _get_dependency_paths(self, node=None):
         """
@@ -93,13 +93,6 @@ class HoudiniSessionPublishPlugin(HookBaseClass):
         return dependency_paths
 
 
-    def _get_dependency_ids(self, node=None):
-        """
-        Find additional id dependencies from the scene
-        """
-        return None
-
-
     def _save_session(self, path, item):
         """
         Save the current session to the supplied path.
@@ -108,3 +101,6 @@ class HoudiniSessionPublishPlugin(HookBaseClass):
         # the next Save As dialog will have the filename box populated with the complete
         # file path.
         hou.hipFile.save(file_name=path.replace("\\", "/").encode("utf-8"))
+
+        # Save the updated property
+        item.properties.path = path
