@@ -264,35 +264,45 @@ class BasicPathInfo(HookBaseClass):
             # path is a sequence path, so just return the input path
             path = frame_path
 
-        path_info = publisher.util.get_file_path_components(path)
-
-        # see if there is a frame number
-        frame_pattern_match = re.search(FRAME_REGEX, path_info["filename"])
-        if not frame_pattern_match:
-            # no frame number detected. carry on.
-            return None
-
-        prefix = frame_pattern_match.group(1)
-        frame_sep = frame_pattern_match.group(2)
-        frame_str = frame_pattern_match.group(3)
-        extension = frame_pattern_match.group(4) or ""
-
-        # make sure we maintain the same padding
-        if not frame_spec:
-            seq_key = self.sgtk.template_keys.get("SEQ")
-            if seq_key:
-                frame_spec = seq_key.default
+        path_template = self.sgtk.template_from_path(path)
+        if path_template:
+            # if the path fits a template, use that and check if it is a file sequence
+            if "SEQ" in path_template.keys:
+                fields = path_template.get_fields(path)
+                del fields["SEQ"]
+                return path_template.apply_fields(fields)
             else:
-                padding = len(frame_str)
-                frame_spec = "%%0%dd" % (padding,)
+                return None
+        else:
+            path_info = publisher.util.get_file_path_components(path)
 
-        seq_filename = "%s%s%s" % (prefix, frame_sep, frame_spec)
+            # see if there is a frame number
+            frame_pattern_match = re.search(FRAME_REGEX, path_info["filename"])
+            if not frame_pattern_match:
+                # no frame number detected. carry on.
+                return None
 
-        if extension:
-            seq_filename = "%s.%s" % (seq_filename, extension)
+            prefix = frame_pattern_match.group(1)
+            frame_sep = frame_pattern_match.group(2)
+            frame_str = frame_pattern_match.group(3)
+            extension = frame_pattern_match.group(4) or ""
 
-        # build the full sequence path
-        return os.path.join(path_info["folder"], seq_filename)
+            # make sure we maintain the same padding
+            if not frame_spec:
+                seq_key = self.sgtk.template_keys.get("SEQ")
+                if seq_key:
+                    frame_spec = seq_key.default
+                else:
+                    padding = len(frame_str)
+                    frame_spec = "%%0%dd" % (padding,)
+
+            seq_filename = "%s%s%s" % (prefix, frame_sep, frame_spec)
+
+            if extension:
+                seq_filename = "%s.%s" % (seq_filename, extension)
+
+            # build the full sequence path
+            return os.path.join(path_info["folder"], seq_filename)
 
     def get_sequence_path_files(self, seq_path, frame_spec=None):
         """
