@@ -216,68 +216,23 @@ class PublishPlugin(HookBaseClass):
 
     def accept(self, task_settings, item):
         """
-        This method is called by the publisher to see if the plugin accepts the
-        supplied item for processing.
+        Method called by the publisher to determine if an item is of any
+        interest to this plugin. Only items matching the filters defined via the
+        item_filters property will be presented to this method.
 
-        Only items matching the filters defined via the :data:`item_filters`
-        property will be presented to this method.
+        A publish task will be generated for each item accepted here. Returns a
+        dictionary with the following booleans:
 
-        A publish task will be generated for each item accepted here.
+            - accepted: Indicates if the plugin is interested in this value at
+                all. Required.
+            - enabled: If True, the plugin will be enabled in the UI, otherwise
+                it will be disabled. Optional, True by default.
+            - visible: If True, the plugin will be visible in the UI, otherwise
+                it will be hidden. Optional, True by default.
+            - checked: If True, the plugin will be checked in the UI, otherwise
+                it will be unchecked. Optional, True by default.
 
-        This method returns a :class:`dict` of the following form::
-
-            {
-                "accepted": <bool>,
-                "enabled": <bool>,
-                "visible": <bool>,
-                "checked": <bool>,
-            }
-
-        The keys correspond to the acceptance state of the supplied item. Not
-        all keys are required. The keys are defined as follows:
-
-        * ``accepted``: Indicates if the plugin is interested in this value at all.
-          If ``False``, no task will be created for this plugin. Required.
-        * ``enabled``: If ``True``, the created task will be enabled in the UI,
-          otherwise it will be disabled (no interaction allowed). Optional,
-          ``True`` by default.
-        * ``visible``: If ``True``, the created task will be visible in the UI,
-          otherwise it will be hidden. Optional, ``True`` by default.
-        * ``checked``: If ``True``, the created task will be checked in the UI,
-          otherwise it will be unchecked. Optional, ``True`` by default.
-
-        In addition to the item, the configured settings for this plugin are
-        supplied. The information provided by each of these arguments can be
-        used to decide whether to accept the item.
-
-        For example, the item's ``properties`` :class:`dict` may house meta data
-        about the item, populated during collection. This data can be used to
-        inform the acceptance logic.
-
-        Example implementation:
-
-        .. code-block:: python
-
-            def accept(self, task_settings, item):
-
-                accept = True
-
-                # get the path for the item as set during collection
-                path = item.properties["path"]
-
-                # ensure the file is not too big
-                size_in_bytes = os.stat(path).st_stize
-                if size_in_bytes > math.pow(10, 9): # 1 GB
-                    self.logger.warning("File is too big (> 1 GB)!")
-                    accept = False
-
-                return {"accepted": accepted}
-
-        :param dict task_settings: The keys are strings, matching the keys returned
-            in the :data:`settings` property. The values are
-            :ref:`publish-api-setting` instances.
-        :param item: The :ref:`publish-api-item` instance to process for
-            acceptance.
+        :param item: Item to process
 
         :returns: dictionary with boolean keys accepted, required and enabled
         """
@@ -720,7 +675,7 @@ class PublishPlugin(HookBaseClass):
         try:
             fields = self.parent.shotgun.schema_field_read(publish_entity_type)
         except Exception, e:
-            self.logger.error("Failed to find fields for the '%s' schema: %s" 
+            self.logger.error("Failed to find fields for the '%s' schema: %s"
                               % (publish_entity_type, e))
 
         bad_fields = list(set(sg_fields.keys()).difference(set(fields)))
@@ -913,13 +868,13 @@ class PublishPlugin(HookBaseClass):
         """
         Given a context, publish name and type, find all publishes from Shotgun
         that match.
-        
+
         :param ctx:             Context to use when looking for publishes
         :param publish_name:    The name of the publishes to look for
         :param publish_type:    The type of publishes to look for
-        
+
         :returns:               A list of Shotgun publish records that match the search
-                                criteria        
+                                criteria
         """
         publisher = self.parent
 
@@ -928,7 +883,7 @@ class PublishPlugin(HookBaseClass):
             publish_type_field = "published_file_type.PublishedFileType.code"
         else:
             publish_type_field = "tank_type.TankType.code"
-        
+
         # construct filters from the context:
         filters = [["project", "is", ctx.project]]
         if ctx.entity:
@@ -941,14 +896,14 @@ class PublishPlugin(HookBaseClass):
             filters.append(["name", "starts_with", publish_name])
         if publish_type:
             filters.append([publish_type_field, "is", publish_type])
-            
+
         # retrieve a list of all matching publishes from Shotgun:
         sg_publishes = []
         try:
             query_fields = ["version_number"]
             sg_publishes = self.parent.shotgun.find(publish_entity_type, filters, query_fields)
         except Exception, e:
-            self.logger.error("Failed to find publishes of type '%s', called '%s', for context %s: %s" 
+            self.logger.error("Failed to find publishes of type '%s', called '%s', for context %s: %s"
                               % (publish_type, publish_name, ctx, e))
         return sg_publishes
 

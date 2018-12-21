@@ -101,10 +101,10 @@ class SessionPublishPlugin(HookBaseClass):
 
             # If the publish version is different (greater) than the current workfile version
             # then we should version up the workfile to match
-            version = path_version
-            if version < publish_version:
+            if path_version < publish_version:
                 err_msg = "Publish version mismatch: Session v%s != Publish v%s." % \
                     (path_version, publish_version)
+                version = path_version
                 while version < publish_version:
                     path = publisher.util.get_next_version_path(path)
                     if not path:
