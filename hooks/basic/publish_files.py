@@ -205,6 +205,7 @@ class FilePublishPlugin(HookBaseClass):
                 accept_data["accepted"] = False
 
         # return the accepted data
+        accept_data["accepted"] = True
         return accept_data
 
 

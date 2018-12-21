@@ -161,6 +161,7 @@ class CreateVersionPlugin(HookBaseClass):
             return accept_data
 
         # return the accepted info
+        accept_data["accepted"] = True
         return accept_data
 
 

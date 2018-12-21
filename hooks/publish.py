@@ -294,9 +294,10 @@ class PublishPlugin(HookBaseClass):
                 }
             }
             accept_data["accepted"] = False
-        else:
-            accept_data["accepted"] = True
+            return accept_data
 
+        # return the accepted data
+        accept_data["accepted"] = True
         return accept_data
 
 

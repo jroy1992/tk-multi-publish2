@@ -126,6 +126,7 @@ class UploadVersionPlugin(HookBaseClass):
             return accept_data
 
         # return the accepted data
+        accept_data["accepted"] = True
         return accept_data
 
 
