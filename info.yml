@@ -106,6 +106,27 @@ configuration:
            buttons to select files or folders. When false, the feature basically
            disable the user ability to add anything to the project."
 
+    manifest_file_name:
+        type: str
+        allows_empty: True
+        default_value: 'contents.yaml'
+        description:
+          "Specifies the name of the files to look for, as a source for processing files to be ingested."
+
+    default_entity_type:
+        type: str
+        allows_empty: True
+        default_value: 'Element'
+        description:
+          "Specifies the default entity type that is created for an ingested item."
+
+    default_snapshot_type:
+        type: str
+        allows_empty: True
+        default_value: 'ingest'
+        description:
+          "Specifies the default snapshot type to be used for an ingested item."
+
 # the Shotgun fields that this app needs in order to operate correctly
 requires_shotgun_fields:
 
