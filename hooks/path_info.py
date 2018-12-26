@@ -643,7 +643,7 @@ class BasicPathInfo(HookBaseClass):
 
         return next_version_path
 
-    def copy_files(self, src_files, dest_path, is_sequence=False):
+    def copy_files(self, src_files, dest_path, seal_files, is_sequence=False):
         """
         This method handles copying an item's path(s) to a designated location.
 
@@ -676,7 +676,7 @@ class BasicPathInfo(HookBaseClass):
                 filesystem.ensure_folder_exists(dest_folder)
                 filesystem.copy_file(src_file, dest_file,
                           permissions=stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
-                          seal=True)
+                          seal=seal_files)
             except Exception as e:
                 raise Exception(
                     "Failed to copy file from '%s' to '%s'.\n%s" %
