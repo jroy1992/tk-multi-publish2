@@ -17,11 +17,6 @@ import traceback
 import sgtk
 from sgtk import TankError
 
-from dd.runtime import api
-
-api.load("preferences")
-import preferences
-
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
@@ -624,15 +619,7 @@ class PublishPlugin(HookBaseClass):
         else:
             work_files = [path]
 
-        prefs = preferences.Preferences(pref_file_name="show_preferences.yaml",
-                                        role=item.properties.fields.get("Step"),
-                                        seq_override=item.properties.fields.get("Sequence"),
-                                        shot_override=item.properties.fields.get("Shot"))
-
-        # disable sealing of files if not described in show_preferences
-        seal_files = prefs.get("seal_files", False)
-
-        return publisher.util.copy_files(work_files, publish_path, seal_files, is_sequence)
+        return publisher.util.copy_files(work_files, publish_path, seal_files=False, is_sequence=is_sequence)
 
 
     def symlink_publishes(self, task_settings, item):
