@@ -643,7 +643,7 @@ class BasicPathInfo(HookBaseClass):
 
         return next_version_path
 
-    def copy_files(self, src_files, dest_path, seal_files, is_sequence=False):
+    def copy_files(self, src_files, dest_path, seal_files=False, is_sequence=False):
         """
         This method handles copying an item's path(s) to a designated location.
 

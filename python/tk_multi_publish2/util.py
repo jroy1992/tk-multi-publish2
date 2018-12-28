@@ -179,7 +179,7 @@ def save_to_next_version(path, save_callback, **kwargs):
     )
 
 
-def copy_files(src_files, dest_path, seal_files, is_sequence=False):
+def copy_files(src_files, dest_path, seal_files=False, is_sequence=False):
     """
     This method handles copying an item's path(s) to a designated location.
 
