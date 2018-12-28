@@ -619,7 +619,10 @@ class PublishPlugin(HookBaseClass):
         else:
             work_files = [path]
 
-        return publisher.util.copy_files(work_files, publish_path, is_sequence)
+        # Determine if we should seal the copied files or not
+        seal_files = item.properties.get("seal_files", False)
+
+        return publisher.util.copy_files(work_files, publish_path, seal_files=seal_files, is_sequence=is_sequence)
 
 
     def symlink_publishes(self, task_settings, item):
