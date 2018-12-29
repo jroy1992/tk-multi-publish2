@@ -239,9 +239,4 @@ class CollectorPlugin(HookBaseClass):
             name_field = item.context.task["name"]
             fields["name"] = urllib.quote(name_field.replace(" ", "_").lower(), safe='')
 
-        # Recurse up the item hierarchy to see if a parent specifies version
-        version = self.__get_parent_version_number_r(item)
-        if version:
-            fields["version"] = version
-
         return fields

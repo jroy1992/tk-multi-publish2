@@ -616,7 +616,11 @@ class BasicPathInfo(HookBaseClass):
             logger.warning("Could not determine the next version path.")
             return None
 
-        elif os.path.exists(next_version_path):
+        # now extract the new version number
+        next_version = self.get_version_number(next_version_path)
+
+        # check to see if the requested version path exists...
+        if os.path.exists(next_version_path):
 
             # determine the next available version_number. just keep asking for
             # the next one until we get one that doesn't exist.
@@ -638,7 +642,7 @@ class BasicPathInfo(HookBaseClass):
             )
 
         # save the file to the new path
-        save_callback(next_version_path, **kwargs)
+        save_callback(next_version_path, next_version, **kwargs)
         logger.info("File saved as: %s" % (next_version_path,))
 
         return next_version_path
