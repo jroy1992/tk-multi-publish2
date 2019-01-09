@@ -266,11 +266,24 @@ class BasicPathInfo(HookBaseClass):
 
         path_template = self.sgtk.template_from_path(path)
         if path_template:
+            # TODO: copied from get_path_for_frame() - refactor this.
+            seq_key = None
             # if the path fits a template, use that and check if it is a file sequence
-            if "SEQ" in path_template.keys:
-                fields = path_template.get_fields(path)
-                del fields["SEQ"]
-                return path_template.apply_fields(fields)
+            for key in path_template.keys.values():
+                if isinstance(key, SequenceKey):
+                    seq_key = key
+                    break
+
+            if seq_key:
+                if seq_key.name in path_template.keys:
+                    fields = path_template.get_fields(path)
+                    if seq_key.name in fields:
+                        del fields[seq_key.name]
+                        return path_template.apply_fields(fields)
+                    else:
+                        # if sequence key is not found, it is optional,
+                        # and the path is not part of a sequence
+                        return None
             else:
                 return None
         else:
