@@ -10,6 +10,7 @@
 
 import glob
 import copy
+import traceback
 
 import maya.cmds as cmds
 import sgtk
@@ -241,7 +242,15 @@ class MayaSessionCollector(HookBaseClass):
                 items.append(item)
 
         except Exception as e:
-            self.logger.warning("%s. Skipping..." % str(e))
+            self.logger.warning("%s. Skipping..." % str(e),
+                                extra={
+                                    "action_show_more_info": {
+                                        "label": "Show Error",
+                                        "tooltip": "Show traceback",
+                                        "text": traceback.format_exc()
+                                    }
+                                }
+                                )
 
         return items
 
