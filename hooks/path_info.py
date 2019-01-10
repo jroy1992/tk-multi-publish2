@@ -73,7 +73,7 @@ class BasicPathInfo(HookBaseClass):
         if seq_path:
             path = seq_path
 
-        path_info = publisher.util.get_file_path_components(path)
+        path_info = publisher.util.get_file_path_components(path, tank=self.tank)
         filename = path_info["filename"]
 
         frame_pattern_match = re.search(FRAME_REGEX, filename)
@@ -118,7 +118,7 @@ class BasicPathInfo(HookBaseClass):
         logger = publisher.logger
         logger.debug("Getting version number for path: %s ..." % (path,))
 
-        path_info = publisher.util.get_file_path_components(path)
+        path_info = publisher.util.get_file_path_components(path, tank=self.tank)
         filename = path_info["filename"]
 
         # default if no version number detected
@@ -142,7 +142,7 @@ class BasicPathInfo(HookBaseClass):
         """
 
         publisher = self.parent
-        path_info = publisher.util.get_file_path_components(path)
+        path_info = publisher.util.get_file_path_components(path, tank=self.tank)
 
         # see if there is a frame number
         frame_pattern_match = re.search(FRAME_REGEX, path_info["filename"])
@@ -168,7 +168,7 @@ class BasicPathInfo(HookBaseClass):
         """
 
         publisher = self.parent
-        path_info = publisher.util.get_file_path_components(path)
+        path_info = publisher.util.get_file_path_components(path, tank=self.tank)
 
         # If the frame_spec is not specified, see if we can determine one
         if not frame_spec:
@@ -197,7 +197,7 @@ class BasicPathInfo(HookBaseClass):
                     path = path_tmpl.apply_fields(fields)
 
                     # Re-process the path info
-                    path_info = publisher.util.get_file_path_components(path)
+                    path_info = publisher.util.get_file_path_components(path, tank=self.tank)
 
                     # Store the default as the frame_spec
                     # NOTE: we do this as opposed to using apply_fields to apply the frame_num
@@ -274,7 +274,7 @@ class BasicPathInfo(HookBaseClass):
             else:
                 return None
         else:
-            path_info = publisher.util.get_file_path_components(path)
+            path_info = publisher.util.get_file_path_components(path, tank=self.tank)
 
             # see if there is a frame number
             frame_pattern_match = re.search(FRAME_REGEX, path_info["filename"])
@@ -459,7 +459,7 @@ class BasicPathInfo(HookBaseClass):
         logger = publisher.logger
         logger.debug("Getting version %s of path: %s ..." % (version, path))
 
-        path_info = publisher.util.get_file_path_components(path)
+        path_info = publisher.util.get_file_path_components(path, tank=self.tank)
         filename = path_info["filename"]
 
         # see if there's a version in the supplied path
@@ -514,7 +514,7 @@ class BasicPathInfo(HookBaseClass):
         if not next_version_path:
             # fallback to regex matching
             # TODO: check entire path instead of just filename?
-            path_info = publisher.util.get_file_path_components(path)
+            path_info = publisher.util.get_file_path_components(path, tank=self.tank)
             filename = path_info["filename"]
 
             # see if there's a version in the supplied path
