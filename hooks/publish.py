@@ -16,6 +16,7 @@ import traceback
 
 import sgtk
 from sgtk import TankError
+from sgtk.platform import create_setting
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -197,11 +198,40 @@ class PublishPlugin(HookBaseClass):
         :param item: The parent item of the task
         :returns: dictionary of settings for this item's task
         """
-        # Return the item-type specific settings
-        if item.type not in self.plugin.settings["Item Type Settings"]:
-            msg = "Key: %s\n%s" % (item.type, pprint.pformat(self.plugin.settings["Item Type Settings"]))
+        publisher = self.parent
+
+        setting_key = "Item Type Settings"
+
+        task_settings = super(PublishPlugin, self).init_task_settings(item)
+
+        # If there are item-type specific settings, return a new dictionary
+        # with just the settings for the current item_type.
+        if item.type in task_settings["Item Type Settings"]:
+
+            settings_value = copy.deepcopy(task_settings.raw_value)
+            settings_schema = copy.deepcopy(task_settings.schema)
+
+            # Delete the item type settings blocks
+            if setting_key in settings_value:
+                del settings_value[setting_key]
+            if setting_key in settings_schema:
+                del settings_schema[setting_key]
+
+            # Get the item_type Setting obj
+            item_type_setting = task_settings[setting_key].get(item.type)
+
+            # Flatten the setting dictionary with the item_type's settings
+            settings_value.update(item_type_setting.raw_value)
+            settings_schema.update(item_type_setting.schema)
+
+            # Create the new task_settings Setting object
+            task_settings = create_setting(task_settings.name, settings_value, settings_schema, publisher)
+
+        # Else, warn the user...
+        else:
+            msg = "Key: %s\n%s" % (item.type, pprint.pformat(task_settings[setting_key]))
             self.logger.warning(
-                "'Item Type Settings' are missing for item type: '%s'" % item.type,
+                "'%s' are missing for item type: '%s'" % (setting_key, item.type),
                 extra={
                     "action_show_more_info": {
                         "label": "Show Info",
@@ -210,8 +240,8 @@ class PublishPlugin(HookBaseClass):
                     }
                 }
             )
-            return {}
-        return self.plugin.settings["Item Type Settings"].get(item.type)
+
+        return task_settings
 
 
     def accept(self, task_settings, item):
