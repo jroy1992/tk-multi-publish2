@@ -289,7 +289,7 @@ class PublishItem(object):
         """
         self._tasks = []
 
-    def create_item(self, type_spec, type_display, name, context=None, properties={}):
+    def create_item(self, type_spec, type_display, name, context=None, properties=None):
         """
         Factory method for generating new items.
 
@@ -356,7 +356,7 @@ class PublishItem(object):
         self._children.append(child_item)
 
         # Set any initial global properties
-        child_item._global_properties = PublishData.from_dict(properties)
+        child_item._global_properties = PublishData.from_dict(properties or {})
 
         # Set the context on the child item if defined
         context = context or self.context
