@@ -668,6 +668,9 @@ class PublishPlugin(PluginBase):
 
         # ---- copy the work files to the publish location
         processed_files = []
+
+        seal_files = item.properties.get("seal_files", False)
+
         for work_file in work_files:
 
             if item.properties["is_sequence"]:
@@ -686,7 +689,7 @@ class PublishPlugin(PluginBase):
                 ensure_folder_exists(dest_folder)
                 copy_file(work_file, dest_file,
                           permissions=stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
-                          seal=True)
+                          seal=seal_files)
             except Exception as e:
                 raise Exception(
                     "Failed to copy work file from '%s' to '%s'.\n%s" %
