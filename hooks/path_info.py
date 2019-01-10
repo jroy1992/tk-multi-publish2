@@ -275,15 +275,14 @@ class BasicPathInfo(HookBaseClass):
                     break
 
             if seq_key:
-                if seq_key.name in path_template.keys:
-                    fields = path_template.get_fields(path)
-                    if seq_key.name in fields:
-                        del fields[seq_key.name]
-                        return path_template.apply_fields(fields)
-                    else:
-                        # if sequence key is not found, it is optional,
-                        # and the path is not part of a sequence
-                        return None
+                fields = path_template.get_fields(path)
+                if seq_key.name in fields:
+                    del fields[seq_key.name]
+                    return path_template.apply_fields(fields)
+                else:
+                    # if sequence key is not found, it is optional,
+                    # and the path is not part of a sequence
+                    return None
             else:
                 return None
         else:
