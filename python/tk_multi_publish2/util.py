@@ -245,12 +245,11 @@ def delete_files(paths_to_delete):
     )
 
 
-def get_file_path_components(path, tank=None):
+def get_file_path_components(path):
     """
     Convenience method for determining file components for a given path.
 
     :param str path: The path to the file to componentize.
-    :param object tank: Tank object to be used instead of creating new one. If not provided we create new tank object.
 
     Returns file path components in the form::
 
@@ -288,10 +287,7 @@ def get_file_path_components(path, tank=None):
         extension = None
     else:
         # file. extract the extension and remove the "."
-        if not tank:
-            tk = sgtk.sgtk_from_path(sgtk.pipelineconfig_utils.get_config_install_location())
-        else:
-            tk = tank
+        tk = sgtk.sgtk_from_path(sgtk.pipelineconfig_utils.get_config_install_location())
         template = tk.template_from_path(path)
         if template and 'extension' in template.get_fields(path):
             extension = template.get_fields(path)['extension']

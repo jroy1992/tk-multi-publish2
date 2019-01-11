@@ -91,7 +91,7 @@ class MultiPublish2(sgtk.platform.Application):
             app = self.parent
 
             # call a util method
-            path_components = app.util.get_file_path_components(path, tank)
+            path_components = app.util.get_file_path_components(path)
 
         Some of the methods available via ``util`` are the ``path_info`` hook
         methods. Exposing them via this property allows them to be called

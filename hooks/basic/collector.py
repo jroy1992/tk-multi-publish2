@@ -532,7 +532,7 @@ class FileCollectorPlugin(HookBaseClass):
         publisher = self.parent
 
         # extract the components of the supplied path
-        file_info = publisher.util.get_file_path_components(path, tank=self.tank)
+        file_info = publisher.util.get_file_path_components(path)
         extension = file_info["extension"]
         filename = file_info["filename"]
 
@@ -740,7 +740,7 @@ class FileCollectorPlugin(HookBaseClass):
 
             # Get the file extension if not already defined
             if "extension" not in fields:
-                file_info = publisher.util.get_file_path_components(path, tank=self.tank)
+                file_info = publisher.util.get_file_path_components(path)
                 fields["extension"] = file_info["extension"]
 
             # Force use of %d format
