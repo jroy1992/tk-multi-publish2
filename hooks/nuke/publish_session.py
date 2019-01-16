@@ -88,7 +88,7 @@ class NukePublishSessionPlugin(HookBaseClass):
         return dependency_paths
 
 
-    def _save_session(self, path, item):
+    def _save_session(self, path, version, item):
         """
         Save the current session to the supplied path.
         """

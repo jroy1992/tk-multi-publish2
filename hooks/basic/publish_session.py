@@ -94,17 +94,20 @@ class SessionPublishPlugin(HookBaseClass):
         if not retval:
             return retval
 
-        path = item.properties.get("path")
-        if path:
-            path_version = publisher.util.get_version_number(path)
-            publish_version = item.properties.publish_version
+        # Compare the work version to the publish version
+        work_version = item.properties.fields.get("version", 1)
+        publish_version = item.properties.publish_version
 
-            # If the publish version is different (greater) than the current workfile version
-            # then we should version up the workfile to match
-            if path_version < publish_version:
-                err_msg = "Publish version mismatch: Session v%s != Publish v%s." % \
-                    (path_version, publish_version)
-                version = path_version
+        # If the publish version is different (greater) than the current workfile version
+        # then we should version up the workfile to match
+        if work_version < publish_version:
+            err_msg = "Publish version mismatch: Session v%s != Publish v%s." % \
+                (work_version, publish_version)
+
+            path = item.properties.get("path")
+            if path:
+                # Get the workfile path for the publish version...
+                version = work_version
                 while version < publish_version:
                     path = publisher.util.get_next_version_path(path)
                     if not path:
@@ -113,7 +116,7 @@ class SessionPublishPlugin(HookBaseClass):
 
                 if os.path.exists(path):
                     self.logger.error(err_msg +
-                        " Version v%s of this file already exists on disk." % path_version,
+                        " Version v%s of this file already exists on disk." % version,
                         extra={
                             "action_show_folder": {
                                 "path": path
@@ -122,18 +125,18 @@ class SessionPublishPlugin(HookBaseClass):
                     )
                     return False
 
-                self.logger.error(
-                    err_msg,
-                    extra={
-                        "action_button": {
-                            "label": "Save to v%s" % (version,),
-                            "tooltip": "Save session to match the publish version number: "
-                                       "v%s" % (version,),
-                            "callback": lambda: self._save_session(path, item)
-                        }
+            self.logger.error(
+                err_msg,
+                extra={
+                    "action_button": {
+                        "label": "Save to v%s" % (publish_version,),
+                        "tooltip": "Save session to match the publish version number: "
+                                   "v%s" % (publish_version,),
+                        "callback": lambda: self._save_session(path, publish_version, item)
                     }
-                )
-                return False
+                }
+            )
+            return False
 
         return True
 
@@ -149,7 +152,7 @@ class SessionPublishPlugin(HookBaseClass):
         """
         # ensure the session is saved
         self.logger.info("Saving the current session...")
-        self._save_session(item.properties.get("path"), item)
+        self._save_session(item.properties.get("path"), item.properties.publish_version, item)
 
         # Store any file/id dependencies
         item.properties.publish_dependency_paths = self._get_dependency_paths()
@@ -206,7 +209,7 @@ class SessionPublishPlugin(HookBaseClass):
         return []
 
 
-    def _save_session(self, path, item):
+    def _save_session(self, path, version, item):
         """
         Save the current session to the supplied path.
         """
