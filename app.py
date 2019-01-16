@@ -43,8 +43,12 @@ class MultiPublish2(sgtk.platform.Application):
         # replace all non alphanumeric characters by '_'
         command_name = re.sub('[^0-9a-zA-Z]+', '_', command_name)
 
+        if self.engine.has_ui:
+            cb = lambda: tk_multi_publish2.show_dialog(self)
+        else:
+            cb = lambda: tk_multi_publish2.run_batch(self)
+
         # register command
-        cb = lambda: tk_multi_publish2.show_dialog(self)
         menu_caption = "%s..." % display_name
         menu_options = {
             "short_name": command_name,
@@ -108,7 +112,7 @@ class MultiPublish2(sgtk.platform.Application):
         """
         return True
 
-    def create_publish_manager(self):
+    def create_publish_manager(self, publish_logger=None):
         """
         Create and return a :class:`tk_multi_publish2.PublishManager` instance.
         See the :class:`tk_multi_publish2.PublishManager` docs for details on
@@ -116,7 +120,7 @@ class MultiPublish2(sgtk.platform.Application):
 
         :returns: A :class:`tk_multi_publish2.PublishManager` instance
         """
-        return self._manager_class()
+        return self._manager_class(publish_logger)
 
     def destroy_app(self):
         """
