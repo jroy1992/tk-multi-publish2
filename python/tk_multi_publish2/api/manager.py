@@ -233,7 +233,7 @@ class PublishManager(object):
         :ref:`publish-api-tree` with the deserialized contents stored in the
         supplied file.
         """
-        self._tree = PublishTree.load_file(path)
+        self._tree = PublishTree.load_file(path, self._logger)
 
     def save(self, path):
         """

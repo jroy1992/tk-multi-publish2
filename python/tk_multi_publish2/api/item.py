@@ -91,7 +91,7 @@ class PublishItem(object):
     ]
 
     @classmethod
-    def from_dict(cls, item_dict, serialization_version, parent=None):
+    def from_dict(cls, item_dict, serialization_version, publish_logger=None, parent=None):
         """
         Create a publish item instance given the supplied dictionary. The
         supplied dictionary is typically the result of calling ``to_dict`` on
@@ -128,6 +128,7 @@ class PublishItem(object):
                 PublishItem.from_dict(
                     child_dict,
                     serialization_version,
+                    publish_logger=publish_logger,
                     parent=new_item
                 )
             )

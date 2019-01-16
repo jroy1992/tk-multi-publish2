@@ -95,7 +95,7 @@ class PublishTree(object):
     SERIALIZATION_VERSION = 1
 
     @classmethod
-    def from_dict(cls, tree_dict):
+    def from_dict(cls, tree_dict, publish_logger=None):
         """
         Create a publish tree instance given the supplied dictionary. The
         supplied dictionary is typically the result of calling ``to_dict`` on
@@ -117,13 +117,14 @@ class PublishTree(object):
         new_tree = cls()
         new_tree._root_item = PublishItem.from_dict(
             tree_dict["root_item"],
-            serialization_version
+            serialization_version,
+            publish_logger
         )
 
         return new_tree
 
     @staticmethod
-    def load_file(file_path):
+    def load_file(file_path, publish_logger=None):
         """
         This method returns a new :class:`~.PublishTree` instance by reading
         a serialized tree file from disk._sgtk_custom_type
@@ -134,7 +135,7 @@ class PublishTree(object):
 
         with open(file_path, "rb") as tree_file_obj:
             try:
-                return PublishTree.load(tree_file_obj)
+                return PublishTree.load(tree_file_obj, publish_logger)
             except Exception, e:
                 logger.error(
                     "Error trying to load publish tree from file '%s': %s" % (file_path, e)
@@ -142,7 +143,7 @@ class PublishTree(object):
                 raise
 
     @staticmethod
-    def load(file_obj):
+    def load(file_obj, publish_logger=None):
         """
         Load a publish tree from a supplied file-like object.
 
@@ -154,7 +155,8 @@ class PublishTree(object):
             # Pass in a object hook so that certain Toolkit objects are restored back
             # from their serialized representation.
             return PublishTree.from_dict(
-                sgtk.util.json.load(file_obj, object_hook=_json_to_objects)
+                sgtk.util.json.load(file_obj, object_hook=_json_to_objects),
+                publish_logger
             )
         except Exception, e:
             logger.error(

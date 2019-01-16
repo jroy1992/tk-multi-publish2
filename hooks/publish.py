@@ -211,12 +211,6 @@ class PublishPlugin(HookBaseClass):
             settings_value = copy.deepcopy(task_settings.raw_value)
             settings_schema = copy.deepcopy(task_settings.schema)
 
-            # Delete the item type settings blocks
-            if setting_key in settings_value:
-                del settings_value[setting_key]
-            if setting_key in settings_schema:
-                del settings_schema[setting_key]
-
             # Get the item_type Setting obj
             item_type_setting = task_settings[setting_key].get(item.type)
 
@@ -309,7 +303,7 @@ class PublishPlugin(HookBaseClass):
         for attr in attr_list:
             try:
                 method = getattr(self, "_get_%s" % attr)
-                item.properties[attr] = method(item, task_settings)
+                item.properties[attr] = method(task_settings, item)
             except Exception:
                 self.logger.error(
                     "Unable to determine '%s' for item: %s" % (attr, item.name),
@@ -722,7 +716,7 @@ class PublishPlugin(HookBaseClass):
         return {k: v for k, v in sg_fields.iteritems() if k not in bad_fields}
 
 
-    def _get_publish_type(self, item, task_settings):
+    def _get_publish_type(self, task_settings, item):
         """
         Get a publish type for the supplied item.
 
@@ -737,7 +731,7 @@ class PublishPlugin(HookBaseClass):
         return publish_type
 
 
-    def _get_publish_path(self, item, task_settings):
+    def _get_publish_path(self, task_settings, item):
         """
         Get a publish path for the supplied item.
 
@@ -800,7 +794,7 @@ class PublishPlugin(HookBaseClass):
         return sgtk.util.ShotgunPath.normalize(publish_path)
 
 
-    def _get_publish_symlink_path(self, item, task_settings):
+    def _get_publish_symlink_path(self, task_settings, item):
         """
         Get a publish symlink path for the supplied item.
 
@@ -856,7 +850,7 @@ class PublishPlugin(HookBaseClass):
         return publish_symlink_path
 
 
-    def _get_publish_version(self, item, task_settings):
+    def _get_publish_version(self, task_settings, item):
         """
         Get the publish version for the supplied item.
 
@@ -941,7 +935,7 @@ class PublishPlugin(HookBaseClass):
         return sg_publishes
 
 
-    def _get_publish_name(self, item, task_settings):
+    def _get_publish_name(self, task_settings, item):
         """
         Get the publish name for the supplied item.
 
@@ -999,7 +993,7 @@ class PublishPlugin(HookBaseClass):
         return publish_name
 
 
-    def _get_publish_linked_entity_name(self, item, task_settings):
+    def _get_publish_linked_entity_name(self, task_settings, item):
         """
         Get the linked entity name for the supplied item.
 
