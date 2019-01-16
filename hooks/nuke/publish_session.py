@@ -61,7 +61,9 @@ class NukePublishSessionPlugin(HookBaseClass):
         # input_nodes = [node for node in dep_nodes if node.Class() in _NUKE_INPUTS]
 
         # figure out all the inputs to the node and pass them as dependency
-        # candidates
+        # candidates together with keeping track of what all file paths have been visited
+        file_path_visited = {}
+
         for dep_node in input_nodes:
             if dep_node['disable'].value() == 1:
                 continue
@@ -70,14 +72,18 @@ class NukePublishSessionPlugin(HookBaseClass):
                 continue
 
             file_path = sgtk.util.ShotgunPath.normalize(file_path)
+            if file_path in file_path_visited:
+                continue
+            else:
+                # Keeping track of visited paths
+                file_path_visited[file_path] = 1
+                # Check if the input path contains a frame number
+                seq_path = publisher.util.get_frame_sequence_path(file_path)
+                if seq_path:
+                    # If so, then use the path with the frame number replaced with the frame spec
+                    file_path = seq_path
 
-            # Check if the input path contains a frame number
-            seq_path = publisher.util.get_frame_sequence_path(file_path)
-            if seq_path:
-                # If so, then use the path with the frame number replaced with the frame spec
-                file_path = seq_path
-
-            dependency_paths.append(file_path)
+                dependency_paths.append(file_path)
 
         return dependency_paths
 
