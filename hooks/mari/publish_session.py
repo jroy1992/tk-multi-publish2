@@ -50,11 +50,8 @@ class MariSessionPublishPlugin(HookBaseClass):
             # save the new version number in the session metadata
             next_version = int(item.properties.publish_version) + 1
 
-            self.logger.info("Versioning up session to v%03d" % next_version)
-            self.parent.engine.set_project_version(item.properties.project, next_version)
-
             # Save the session
-            self._save_session("", item)
+            self._save_session("", next_version, item)
 
 
     def publish_files(self, task_settings, item, publish_path):
@@ -122,9 +119,12 @@ class MariSessionPublishPlugin(HookBaseClass):
         return publish_ids
 
 
-    def _save_session(self, path, item):
+    def _save_session(self, path, version, item):
         """
         Save the current session.
         """
+        self.logger.info("Setting session version to 'v%03d'" % version)
+        self.parent.engine.set_project_version(item.properties.project, version)
+
         # Save the session
         item.properties.project.save()

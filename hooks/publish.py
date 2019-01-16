@@ -298,7 +298,7 @@ class PublishPlugin(HookBaseClass):
 
         # ---- validate the settings required to publish
 
-        attr_list = ("publish_type", "publish_name", "publish_version", "publish_path",
+        attr_list = ("publish_type", "publish_version", "publish_name", "publish_path",
                      "publish_symlink_path", "publish_linked_entity_name")
         for attr in attr_list:
             try:
@@ -331,11 +331,10 @@ class PublishPlugin(HookBaseClass):
 
         if publishes:
             conflict_info = (
-                "If you continue, these conflicting publishes will no longer "
-                "be available to other users via the loader:<br>"
+                "Found the following conflicting publishes:<br>"
                 "<pre>%s</pre>" % (pprint.pformat(publishes),)
             )
-            self.logger.warning(
+            self.logger.error(
                 "Found %s conflicting publishes in Shotgun" % (len(publishes),),
                 extra={
                     "action_show_more_info": {
@@ -345,6 +344,7 @@ class PublishPlugin(HookBaseClass):
                     }
                 }
             )
+            return False
 
         if item.properties.get("is_sequence"):
             path = publisher.util.get_path_for_frame(item.properties.path, "*")
@@ -364,24 +364,24 @@ class PublishPlugin(HookBaseClass):
 
                 if seq_files:
                     conflict_info = (
-                        "The following files already exist!<br>"
+                        "The following published files already exist:<br>"
                         "<pre>%s</pre>" % (pprint.pformat(seq_files),)
                     )
             else:
                 if os.path.exists(item.properties.publish_path):
                     conflict_info = (
-                        "The following file already exists!<br>"
+                        "The following published file already exists:<br>"
                         "<pre>%s</pre>" % (item.properties.publish_path,)
                     )
 
             if conflict_info:
                 self.logger.error(
-                    "Version '%s' of this file already exists on disk." %
+                    "Found conflicting publishes for 'v%s' on disk." %
                         (item.properties.publish_version,),
                     extra={
                         "action_show_more_info": {
                             "label": "Show Conflicts",
-                            "tooltip": "Show the conflicting published files",
+                            "tooltip": "Show the conflicting published file(s)",
                             "text": conflict_info
                         }
                     }
@@ -869,70 +869,8 @@ class PublishPlugin(HookBaseClass):
             # should match their parent's publish version number
             return parent_version
 
-        publish_name = item.properties.publish_name
-        publish_type = item.properties.publish_type
-
-        # First find existing publishes to determine if this version has already been published
-        existing_publishes = self._find_publishes(self.parent.context, publish_name, publish_type)
-        publish_versions = [p["version_number"] for p in existing_publishes]
-
-        # The get the version number from the path, if defined
-        version = int(item.properties.fields.get("version", 1))
-
-        # Find the first value equal to or greater than the file version that doesn't already exist
-        while True:
-            try:
-                publish_versions.index(version)
-            except ValueError:
-                break
-            else:
-                version += 1
-
-        return version
-
-
-    def _find_publishes(self, ctx, publish_name, publish_type):
-        """
-        Given a context, publish name and type, find all publishes from Shotgun
-        that match.
-
-        :param ctx:             Context to use when looking for publishes
-        :param publish_name:    The name of the publishes to look for
-        :param publish_type:    The type of publishes to look for
-
-        :returns:               A list of Shotgun publish records that match the search
-                                criteria
-        """
-        publisher = self.parent
-
-        publish_entity_type = sgtk.util.get_published_file_entity_type(self.parent.sgtk)
-        if publish_entity_type == "PublishedFile":
-            publish_type_field = "published_file_type.PublishedFileType.code"
-        else:
-            publish_type_field = "tank_type.TankType.code"
-
-        # construct filters from the context:
-        filters = [["project", "is", ctx.project]]
-        if ctx.entity:
-            filters.append(["entity", "is", ctx.entity])
-        if ctx.task:
-            filters.append(["task", "is", ctx.task])
-
-        # add in name & type:
-        if publish_name:
-            filters.append(["name", "starts_with", publish_name])
-        if publish_type:
-            filters.append([publish_type_field, "is", publish_type])
-
-        # retrieve a list of all matching publishes from Shotgun:
-        sg_publishes = []
-        try:
-            query_fields = ["version_number"]
-            sg_publishes = self.parent.shotgun.find(publish_entity_type, filters, query_fields)
-        except Exception, e:
-            self.logger.error("Failed to find publishes of type '%s', called '%s', for context %s: %s"
-                              % (publish_type, publish_name, ctx, e))
-        return sg_publishes
+        # Get the publish version from the item's fields
+        return item.properties.fields.get("version", 1)
 
 
     def _get_publish_name(self, task_settings, item):
@@ -951,6 +889,9 @@ class PublishPlugin(HookBaseClass):
 
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
+
+        # Update the version field with the publish_version
+        fields["version"] = item.properties.publish_version
 
         publish_name_template = task_settings.get("publish_name_template").value
         publish_name = None
@@ -1004,6 +945,9 @@ class PublishPlugin(HookBaseClass):
 
         # Start with the item's fields
         fields = copy.copy(item.properties.get("fields", {}))
+
+        # Update the version field with the publish_version
+        fields["version"] = item.properties.publish_version
 
         publish_linked_entity_name_template = task_settings.get("publish_linked_entity_name_template").value
         publish_linked_entity_name = None

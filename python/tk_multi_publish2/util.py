@@ -287,8 +287,8 @@ def get_file_path_components(path):
         extension = None
     else:
         # file. extract the extension and remove the "."
-        tk = sgtk.sgtk_from_path(sgtk.pipelineconfig_utils.get_config_install_location())
-        template = tk.template_from_path(path)
+        publisher = sgtk.platform.current_bundle()
+        template = publisher.sgtk.template_from_path(path)
         if template and 'extension' in template.get_fields(path):
             extension = template.get_fields(path)['extension']
         else:
