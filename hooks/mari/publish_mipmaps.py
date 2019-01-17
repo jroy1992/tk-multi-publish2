@@ -24,7 +24,7 @@ HookBaseClass = sgtk.get_hook_baseclass()
 
 MARI_MIPMAPS_ITEM_TYPE_SETTINGS = {
     "mari.mipmap": {
-        "publish_type": "UDIM Image",
+        "publish_type": "UDIM Image Mipmap",
         "publish_name_template": None,
         "publish_path_template": None
     }

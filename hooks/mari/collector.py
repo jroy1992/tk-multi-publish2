@@ -239,7 +239,7 @@ class MariSessionCollector(HookBaseClass):
 
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
-                
+
                 if collect_layers and len(found_layers) > 1:
                     items.extend(self._add_layers_to_channel_item(settings,
                                                                   channel_item,
@@ -339,24 +339,7 @@ class MariSessionCollector(HookBaseClass):
 
             self.logger.info("Collected item: %s" % layer_item.name)
             items.append(layer_item)
-
-                    # for each layer, add associated mipmap item
-                    item_name = "%s, %s (%s mipmap)" % (geo.name(), channel.name(), layer_name)
-                    mipmap_item = self._add_item(settings,
-                                                layer_item,
-                                                item_name,
-                                                "mari.mipmap",
-                                                parent_item.context,
-                                                layer_properties)
-
-                    mipmap_item.set_thumbnail_from_path(thumbnail)
-                    mipmap_item.thumbnail_enabled = True
-
-                    # TODO: required?
-                    mipmap_item.properties.fields = self._resolve_item_fields(settings, mipmap_item)
-
-                    self.logger.info("Collected item: %s" % mipmap_item.name)
-                    items.append(mipmap_item)
+                    items.append(layer_item)
 
         return items
 
