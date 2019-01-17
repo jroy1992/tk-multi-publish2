@@ -98,6 +98,16 @@ class MariSessionCollector(HookBaseClass):
             "allows_empty": True,
             "description": "A list of templates to use to search for work files."
         }
+        schema["Mipmap Extensions"] = {
+            "type": "list",
+            "values": {
+                "type": "str",
+                "description": ""
+            },
+            "default_value": [],
+            "allows_empty": True,
+            "description": "A list of extensions for which mipmaps should be created."
+        }
         return schema
 
 
@@ -173,6 +183,7 @@ class MariSessionCollector(HookBaseClass):
 
         layers_item = None
         thumbnail = self._extract_mari_thumbnail()
+        mipmap_extensions = settings["Mipmap Extensions"].value
 
         # Look for all layers for all channels on all geometry.  Create items for both
         # the flattened channel as well as the individual layers
@@ -211,28 +222,23 @@ class MariSessionCollector(HookBaseClass):
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
 
-                # for flattened channel, add associated mipmap item
-                item_name = "%s, %s (mipmap)" % (geo.name(), channel.name())
-                channel_mipmap_item = self._add_item(settings,
-                                                     channel_item,
-                                                     item_name,
-                                                     "mari.mipmap",
-                                                     parent_item.context,
-                                                     properties)
+                # for flattened channel, add associated mipmap items
+                for extension in mipmap_extensions:
+                    item_name = "%s, %s (mipmap - %s)" % (geo.name(), channel.name(), extension)
+                    channel_mipmap_item = self._add_item(settings,
+                                                         channel_item,
+                                                         item_name,
+                                                         "mari.mipmap",
+                                                         parent_item.context,
+                                                         properties)
 
-                channel_mipmap_item.set_thumbnail_from_path(thumbnail)
-                channel_mipmap_item.thumbnail_enabled = True
+                    channel_mipmap_item.set_thumbnail_from_path(thumbnail)
+                    channel_mipmap_item.thumbnail_enabled = True
 
-                self.logger.info("Collected item: %s" % channel_mipmap_item.name,
-                                 extra={
-                                     "action_show_more_info": {
-                                         "label": "Show Info",
-                                         "tooltip": "Show more info",
-                                         "text": "{}".format(channel_mipmap_item.properties)
-                                     }
-                                 }
-                                 )
-                items.append(channel_mipmap_item)
+                    channel_mipmap_item.properties.fields["extension"] = extension
+
+                    self.logger.info("Collected item: %s" % channel_mipmap_item.name)
+                    items.append(channel_mipmap_item)
 
                 if len(collected_layers) > 0 and layers_item is None:
                     layers_item = self._add_item(settings,
@@ -273,20 +279,23 @@ class MariSessionCollector(HookBaseClass):
                     self.logger.info("Collected item: %s" % layer_item.name)
                     items.append(layer_item)
 
-                    # for each layer, add associated mipmap item
-                    item_name = "%s, %s (%s mipmap)" % (geo.name(), channel.name(), layer_name)
-                    layer_mipmap_item = self._add_item(settings,
-                                                       layer_item,
-                                                       item_name,
-                                                       "mari.mipmap",
-                                                       parent_item.context,
-                                                       layer_properties)
+                    # for each layer, add associated mipmap items
+                    for extension in mipmap_extensions:
+                        item_name = "%s, %s (%s mipmap - %s)" % (geo.name(), channel.name(),
+                                                                 layer_name, extension)
+                        layer_mipmap_item = self._add_item(settings,
+                                                           layer_item,
+                                                           item_name,
+                                                           "mari.mipmap",
+                                                           parent_item.context,
+                                                           layer_properties)
 
-                    layer_mipmap_item.set_thumbnail_from_path(thumbnail)
-                    layer_mipmap_item.thumbnail_enabled = True
+                        layer_mipmap_item.set_thumbnail_from_path(thumbnail)
+                        layer_mipmap_item.thumbnail_enabled = True
+                        layer_mipmap_item.properties.fields["extension"] = extension
 
-                    self.logger.info("Collected item: %s" % layer_mipmap_item.name)
-                    items.append(layer_mipmap_item)
+                        self.logger.info("Collected item: %s" % layer_mipmap_item.name)
+                        items.append(layer_mipmap_item)
 
         return items
 
@@ -478,8 +487,5 @@ class MariSessionCollector(HookBaseClass):
             fields["channel"] = channel_name
             fields["layer"] = layer_name
             fields["UDIM"] = "FORMAT: $UDIM"
-
-            if item.type == "mari.mipmap":
-                fields["extension"] = "tx"
 
         return fields
