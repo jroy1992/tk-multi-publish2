@@ -42,6 +42,10 @@ MARI_SESSION_ITEM_TYPES = {
     "mari.texture": {
         "icon_path": "{self}/hooks/icons/texture.png",
         "type_display": "Layer"    
+    },
+    "mari.mipmap": {
+        "icon_path": "{self}/hooks/icons/mari_mipmap.png",
+        "type_display": "Mipmap"
     }
 }
 
@@ -207,6 +211,29 @@ class MariSessionCollector(HookBaseClass):
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
 
+                # for flattened channel, add associated mipmap item
+                item_name = "%s, %s (mipmap)" % (geo.name(), channel.name())
+                channel_mipmap_item = self._add_item(settings,
+                                                     channel_item,
+                                                     item_name,
+                                                     "mari.mipmap",
+                                                     parent_item.context,
+                                                     properties)
+
+                channel_mipmap_item.set_thumbnail_from_path(thumbnail)
+                channel_mipmap_item.thumbnail_enabled = True
+
+                self.logger.info("Collected item: %s" % channel_mipmap_item.name,
+                                 extra={
+                                     "action_show_more_info": {
+                                         "label": "Show Info",
+                                         "tooltip": "Show more info",
+                                         "text": "{}".format(channel_mipmap_item.properties)
+                                     }
+                                 }
+                                 )
+                items.append(channel_mipmap_item)
+
                 if len(collected_layers) > 0 and layers_item is None:
                     layers_item = self._add_item(settings,
                                                  channel_item,
@@ -248,21 +275,18 @@ class MariSessionCollector(HookBaseClass):
 
                     # for each layer, add associated mipmap item
                     item_name = "%s, %s (%s mipmap)" % (geo.name(), channel.name(), layer_name)
-                    mipmap_item = self._add_item(settings,
-                                                layer_item,
-                                                item_name,
-                                                "mari.mipmap",
-                                                parent_item.context,
-                                                layer_properties)
+                    layer_mipmap_item = self._add_item(settings,
+                                                       layer_item,
+                                                       item_name,
+                                                       "mari.mipmap",
+                                                       parent_item.context,
+                                                       layer_properties)
 
-                    mipmap_item.set_thumbnail_from_path(thumbnail)
-                    mipmap_item.thumbnail_enabled = True
+                    layer_mipmap_item.set_thumbnail_from_path(thumbnail)
+                    layer_mipmap_item.thumbnail_enabled = True
 
-                    # TODO: required?
-                    mipmap_item.properties.fields = self._resolve_item_fields(settings, mipmap_item)
-
-                    self.logger.info("Collected item: %s" % mipmap_item.name)
-                    items.append(mipmap_item)
+                    self.logger.info("Collected item: %s" % layer_mipmap_item.name)
+                    items.append(layer_mipmap_item)
 
         return items
 
