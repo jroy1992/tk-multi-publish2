@@ -339,7 +339,6 @@ class MariSessionCollector(HookBaseClass):
 
             self.logger.info("Collected item: %s" % layer_item.name)
             items.append(layer_item)
-                    items.append(layer_item)
 
         return items
 
@@ -535,9 +534,6 @@ class MariSessionCollector(HookBaseClass):
             fields["channel"] = channel_name
             fields["layer"] = layer_name
             fields["UDIM"] = "FORMAT: $UDIM"
-
-            if item.type == "mari.mipmap":
-                fields["extension"] = "tx"
 
         return fields
 
