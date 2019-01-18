@@ -147,7 +147,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                 src_files = [source_path]
 
             # write mipmaps for each file in the sequence
-            self.create_mipmaps_for_seq(src_files, target_path)
+            mipmap_paths = self.create_mipmaps_for_seq(src_files, target_path)
 
         except Exception as e:
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
@@ -156,7 +156,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
             "Published file for item '%s' to '%s'." % (item.name, target_path)
         )
 
-        return [target_path]
+        return mipmap_paths
 
     def create_mipmaps_for_seq(self, source_paths, target_seq_path):
         """
@@ -165,8 +165,11 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         :param source_paths:        list of source image files
         :param target_seq_path:     path (with an seq field if source is an image sequence)
                                     where the mipmaps should be written
+
+        :returns:                   list of created mipmap paths
         """
         publisher = self.parent
+        mipmap_paths = []
 
         for source_path in source_paths:
             frame = publisher.util.get_frame_number(source_path)
@@ -182,6 +185,10 @@ class MariPublishMipmapsPlugin(HookBaseClass):
 
             if not self._create_mipmap(source_path, target_path):
                 self.logger.warning("Mipmap not created for: {}".format(target_path))
+            else:
+                mipmap_paths.append(target_path)
+
+        return mipmap_paths
 
     def _create_mipmap(self, source_path, target_path):
         """
