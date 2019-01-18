@@ -114,7 +114,17 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                 self.logger.error(error_msg)
                 return False
 
-        return super(MariPublishMipmapsPlugin, self).validate(task_settings, item)
+        if not super(MariPublishMipmapsPlugin, self).validate(task_settings, item):
+            return False
+
+        publish_path = sgtk.util.ShotgunPath.normalize(item.properties.get("publish_path"))
+        if not self._valid_for_mipmap_multiimage(publish_path):
+            error_msg = "Failed to find OIIO plugin or mipmap not supported for extension: %s " \
+                        "Validation failed." % os.path.splitext(publish_path)[-1]
+            self.logger.error(error_msg)
+            return False
+
+        return True
 
 
     def publish_files(self, task_settings, item, publish_path):
@@ -203,10 +213,6 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         source_path = str(source_path)
         target_path = str(target_path)
 
-        if not self._valid_for_mipmap_multiimage(target_path):
-            self.logger.warning("Mipmap not created for: {}".format(target_path))
-            return False
-
         _img_input = oiio.ImageBuf(source_path)
         _target_spec = oiio.ImageSpec(_img_input.spec())
         _target_spec.attribute("maketx:filtername", "lanczos3")
@@ -220,7 +226,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         :rtype: C{bool}
         :return: Valid mipmap and multiimage target object
         """
-        _target = oiio.ImageOutput.create(target_path)
+        _target = oiio.ImageOutput.create(str(target_path))
         if not _target:
             self.logger.warning("Issues locating OIIO plugin for "
                                 "'{0}'".format(os.path.splitext(target_path)[-1]))
