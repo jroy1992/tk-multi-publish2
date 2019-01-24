@@ -23,7 +23,7 @@ class FarmSubmission(sgtk.get_hook_baseclass()):
         :param tree: The tree of items and tasks that has just been published.
         :type tree: :ref:`publish-api-tree`
         """
-        if not self.is_on_farm_machine():
+        if self.is_on_farm_machine():
             # Do nothing
             return
 
