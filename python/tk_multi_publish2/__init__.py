@@ -58,85 +58,95 @@ def show_dialog(app):
     if publish_preload_path and os.path.isdir(publish_preload_path):
         _handle_publish_preload_path(app, publish_preload_path, PRELOAD_SIGNALER)
 
-def run_batch(app, publish_tree_file=None):
+def run_batch(app, publish_tree_file=None, item_filter=None, task_filter=None, logger=None):
     """
     Runs the publisher in batch mode.
 
     :param app: The parent App
     :param publish_tree_file: The path to a serialized publish tree.
+    :param item_filter: A list of items to publish, specified by name.
+    :param task_filter: A list of tasks to run, specified by name.
+    :param logger: The logger object.
     """
+    logger = logger or app.logger
+
     # Create a publish manager
-    manager = PublishManager(app.logger)
+    manager = PublishManager(logger)
 
     publish_tree_file = publish_tree_file or os.environ.get("SGTK_PUBLISH_TREE_FILE")
     if publish_tree_file:
         # Load the publish tree
-        app.loger.info("Processing Publish Tree File: %s" % publish_tree_file)
+        logger.info("Processing Publish Tree File: %s" % publish_tree_file)
         manager.load(publish_tree_file)
 
     else:
         # this will pre-populate publisher when it is run with --p flag.
         publish_preload_path = os.environ.get('SGTK_PUBLISH_PRELOAD_PATH')
         if publish_preload_path:
-            app.logger.info("Processing Preload Path: %s" % publish_preload_path)
+            logger.info("Processing Preload Path: %s" % publish_preload_path)
             new_items = manager.collect_files([publish_preload_path])
             num_items_created = len(new_items)
             if num_items_created > 0:
-                app.logger.info("%s item(s) were added." % num_items_created)
+                logger.info("%s item(s) were added." % num_items_created)
             else:
-                app.logger.info("No item(s) were added.")
+                logger.info("No item(s) were added.")
                 return True
         else:
-            app.logger.error("Nothing to process! Exiting...")
+            logger.error("Nothing to process! Exiting...")
             return True
 
     # See if there is a custom task generator defined
-    task_generator = None
     generator_hook_file = app.get_setting("task_generator_hook")
     if generator_hook_file:
         task_generator = app.create_hook_instance(
             generator_hook_file,
-            manager.tree
+            manager.tree,
+            item_filter,
+            task_filter
         )
 
+    # Else use the default generator
+    else:
+        task_generator = manager.default_task_generator(item_filter, task_filter)
+
     # Run all steps.
-    app.logger.info("Starting Publish!")
+    logger.info("Starting Publish!")
 
     # is the app configured to execute the validation when publish
     # is triggered?
     if app.get_setting("validate_on_publish"):
-        app.logger.info("Running validation pass")
+        logger.info("Running validation pass")
         try:
             failed_to_validate = manager.validate(task_generator)
             num_issues = len(failed_to_validate)
         finally:
             if num_issues > 0:
-                app.logger.error("Validation Complete. %d issues reported. Not proceeding with publish." % num_issues)
+                logger.error("Validation Complete. %d issues reported. Not proceeding with publish." % num_issues)
                 return False
             else:
-                app.logger.info("Validation Complete. All checks passed.")
+                logger.info("Validation Complete. All checks passed.")
     else:
-        app.logger.info("'validate_on_publish' is False. Skipping validation pass.")
+        logger.info("'validate_on_publish' is False. Skipping validation pass.")
 
-    app.logger.info("Running publishing pass")
+    logger.info("Running publishing pass")
     try:
         manager.publish(task_generator)
     except Exception:
-        app.logger.error("Error while publishing. Aborting.")
+        logger.error("Error while publishing. Aborting.")
         # ensure the full error shows up in the log file
-        app.logger.error("Publish error stack:\n%s" % (traceback.format_exc(),))
+        logger.error("Publish error stack:\n%s" % (traceback.format_exc(),))
         return False
-    app.logger.info("Publishing pass Complete.")
+    logger.info("Publishing pass Complete.")
 
-    app.logger.info("Running finalize pass")
+    logger.info("Running finalize pass")
     try:
         manager.finalize(task_generator)
     except Exception:
-        app.logger.error("Error while finalizing. Aborting.")
+        logger.error("Error while finalizing. Aborting.")
         # ensure the full error shows up in the log file
-        app.logger.error("Finalize error stack:\n%s" % (traceback.format_exc(),))
+        logger.error("Finalize error stack:\n%s" % (traceback.format_exc(),))
         return False
-    app.logger.info("Finalize pass Complete.")
+    logger.info("Finalize pass Complete.")
 
-    app.logger.info("Publish Complete!")
+    logger.info("Publish Complete!")
     return True

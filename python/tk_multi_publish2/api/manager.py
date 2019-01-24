@@ -7,6 +7,7 @@
 # By accessing, using, copying or modifying this work you indicate your
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
+import collections
 
 import sgtk
 
@@ -548,7 +549,7 @@ class PublishManager(object):
         # no existing, persistent item was collected with this path
         return False
 
-    def _task_generator(self):
+    def default_task_generator(self, item_filter=None, task_filter=None):
         """
         This method generates all active tasks for all active items in the
         publish tree and yields them to the caller.
@@ -556,9 +557,24 @@ class PublishManager(object):
         This is the default task generator used by validate, publish, and
         finalize if no custom task generator is supplied.
         """
+        item_filter = item_filter or []
+        task_filter = task_filter or []
+
+        if not isinstance(item_filter, collections.Iterable):
+            raise TypeError("item_filter should be of type `list`")
+        if not isinstance(task_filter, collections.Iterable):
+            raise TypeError("task_filter should be of type `list`")
 
         self.logger.debug("Iterating over tasks...")
         for item in self.tree:
+
+            if len(item_filter):
+                if item.name not in item_filter:
+                    logger.debug("
+                        "Skipping item '%s' because it isn't in the specified filter" %
+                        (item,)
+                    )
+                    continue
 
             if not item.active:
                 logger.debug(
@@ -574,6 +590,14 @@ class PublishManager(object):
 
             logger.debug("Processing item: %s" % (item,))
             for task in item.tasks:
+
+                if len(task_filter):
+                    if task.name not in task_filter:
+                        logger.debug("
+                            "Skipping task '%s' because it isn't in the specified filter" %
+                            (task,)
+                        )
+                        continue
 
                 if not task.active:
                     logger.debug("Skipping inactive task: %s" % (task,))
