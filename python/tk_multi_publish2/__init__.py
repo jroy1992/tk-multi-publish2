@@ -64,9 +64,11 @@ def run_batch(app, publish_tree_file=None, item_filter=None, task_filter=None, l
 
     :param app: The parent App
     :param publish_tree_file: The path to a serialized publish tree.
-    :param item_filter: A list of items to publish, specified by name.
-    :param task_filter: A list of tasks to run, specified by name.
-    :param logger: The logger object.
+    :param item_filter: A list of :class:`~PublishItem` names to include.
+    :param task_filter: A list of :class:`~PublishTask` names to include.
+    :param publish_logger: The logger object to use for logging.
+
+    :returns: `True` if success, `False` otherwise.
     """
     logger = logger or app.logger
 

@@ -556,14 +556,12 @@ class PublishManager(object):
 
         This is the default task generator used by validate, publish, and
         finalize if no custom task generator is supplied.
+
+        :param item_filter: A list of :class:`~PublishItem` names to include.
+        :param task_filter: A list of :class:`~PublishTask` names to include.
         """
         item_filter = item_filter or []
         task_filter = task_filter or []
-
-        if not isinstance(item_filter, collections.Iterable):
-            raise TypeError("item_filter should be of type `list`")
-        if not isinstance(task_filter, collections.Iterable):
-            raise TypeError("task_filter should be of type `list`")
 
         self.logger.debug("Iterating over tasks...")
         for item in self.tree:

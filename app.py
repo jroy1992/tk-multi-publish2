@@ -126,6 +126,11 @@ class MultiPublish2(sgtk.platform.Application):
         """
         Run the publisher in batch mode for the specified publish_tree file.
 
+        :param publish_tree_file: The path to a serialized publish tree.
+        :param item_filter: A list of items to publish, specified by name.
+        :param task_filter: A list of tasks to run, specified by name.
+        :param publish_logger: The logger object to use for logging.
+
         :returns: `True` if success, `False` otherwise.
         """
         tk_multi_publish2 = self.import_module("tk_multi_publish2")
