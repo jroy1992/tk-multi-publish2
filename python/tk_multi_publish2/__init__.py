@@ -50,7 +50,7 @@ def show_dialog(app):
     if publish_preload_path and os.path.isdir(publish_preload_path):
         _handle_publish_preload_path(app, publish_preload_path, PRELOAD_SIGNALER)
 
-def run_batch(app, publish_tree_file=None, item_filter=None, task_filter=None, logger=None):
+def run_batch(app, publish_tree=None, item_filter=None, task_filter=None, logger=None):
     """
     Runs the publisher in batch mode.
 
@@ -67,9 +67,15 @@ def run_batch(app, publish_tree_file=None, item_filter=None, task_filter=None, l
     # Create a publish manager
     manager = PublishManager(logger)
 
-    publish_tree_file = publish_tree_file or os.environ.get("SGTK_PUBLISH_TREE_FILE")
-    if publish_tree_file:
-        # Load the publish tree
+    # See if a publish tree is being passed through from the environment
+    publish_tree_file = os.environ.get("SGTK_PUBLISH_TREE_FILE")
+
+    # Load the publish tree
+    if publish_tree:
+        logger.info("Processing Publish Tree Dict")
+        manager.load_dict(publish_tree)
+
+    elif publish_tree_file:
         logger.info("Processing Publish Tree File: %s" % publish_tree_file)
         manager.load(publish_tree_file)
 

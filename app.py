@@ -122,11 +122,11 @@ class MultiPublish2(sgtk.platform.Application):
         """
         return self._manager_class(publish_logger)
 
-    def run_publish(self, publish_tree_file, item_filter=None, task_filter=None, publish_logger=None):
+    def run_publish(self, publish_tree, item_filter=None, task_filter=None, publish_logger=None):
         """
         Run the publisher in batch mode for the specified publish_tree file.
 
-        :param publish_tree_file: The path to a serialized publish tree.
+        :param publish_tree: The dictionary representing the serialized publish tree.
         :param item_filter: A list of items to publish, specified by name.
         :param task_filter: A list of tasks to run, specified by name.
         :param publish_logger: The logger object to use for logging.
@@ -136,7 +136,7 @@ class MultiPublish2(sgtk.platform.Application):
         tk_multi_publish2 = self.import_module("tk_multi_publish2")
         return tk_multi_publish2.run_batch(
             self,
-            publish_tree_file,
+            publish_tree,
             item_filter,
             task_filter,
             publish_logger

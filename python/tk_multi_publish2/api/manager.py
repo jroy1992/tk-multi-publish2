@@ -236,6 +236,16 @@ class PublishManager(object):
         """
         self._tree = PublishTree.load_file(path, self._logger)
 
+    def load_dict(self, tree_dict):
+        """
+        Load an already deserialized publish tree dictionary.
+
+        This is a convenience method that replaces the manager's underlying
+        :ref:`publish-api-tree` with the deserialized contents stored in the
+        supplied file.
+        """
+        self._tree = PublishTree.from_dict(tree_dict, self._logger)
+
     def save(self, path):
         """
         Saves a publish tree to disk.
