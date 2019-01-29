@@ -40,12 +40,12 @@ class HoudiniPublishFilesPlugin(HookBaseClass):
         node = item.properties.get("node")
         if node:
             # Store any node dependencies
-            item.properties.publish_dependency_paths = self._get_dependency_paths(node)
+            item.local_properties.publish_dependency_paths = self._get_dependency_paths(task_settings, item, node)
 
         super(HoudiniPublishFilesPlugin, self).publish(task_settings, item)
 
 
-    def _get_dependency_paths(self, node=None):
+    def _get_dependency_paths(self, task_settings, item, node=None):
         """
         Find all dependency paths for the current node. If no node specified,
         will return all dependency paths for the houdini scene.

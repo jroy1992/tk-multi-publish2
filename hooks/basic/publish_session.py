@@ -155,8 +155,8 @@ class SessionPublishPlugin(HookBaseClass):
         self._save_session(item.properties.get("path"), item.properties.publish_version, item)
 
         # Store any file/id dependencies
-        item.properties.publish_dependency_paths = self._get_dependency_paths()
-        item.properties.publish_dependency_ids = self._get_dependency_ids()
+        item.properties.publish_dependency_paths = self._get_dependency_paths(task_settings, item)
+        item.properties.publish_dependency_ids = self._get_dependency_ids(task_settings, item)
 
         super(SessionPublishPlugin, self).publish(task_settings, item)
 
@@ -187,7 +187,7 @@ class SessionPublishPlugin(HookBaseClass):
             )
 
 
-    def _get_dependency_paths(self, node=None):
+    def _get_dependency_paths(self, task_settings, item, node=None):
         """
         Find all dependency paths for the current node. If no node specified,
         will return all dependency paths for the session.
@@ -198,7 +198,7 @@ class SessionPublishPlugin(HookBaseClass):
         return []
 
 
-    def _get_dependency_ids(self, node=None):
+    def _get_dependency_ids(self, task_settings, item, node=None):
         """
         Find all dependency ids for the current node. If no node specified,
         will return all dependency ids for the session.

@@ -12,6 +12,7 @@ import collections
 import copy
 
 import sgtk
+from sgtk import TankError
 from sgtk.platform import create_setting
 
 logger = sgtk.platform.get_logger(__name__)

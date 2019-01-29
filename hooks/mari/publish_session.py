@@ -89,7 +89,7 @@ class MariSessionPublishPlugin(HookBaseClass):
         return [path]
 
 
-    def _get_dependency_ids(self, node=None):
+    def _get_dependency_ids(self, task_settings, item, node=None):
         """
         Find all dependency ids for the current node. If no node specified,
         will return all dependency ids for the session.
