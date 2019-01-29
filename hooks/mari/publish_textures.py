@@ -191,4 +191,5 @@ class MariPublishTexturesPlugin(HookBaseClass):
             "Published file for item '%s' to '%s'." % (item.name, path)
         )
 
+        # TODO: return expanded list
         return [path]

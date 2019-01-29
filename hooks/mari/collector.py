@@ -98,16 +98,6 @@ class MariSessionCollector(HookBaseClass):
             "allows_empty": True,
             "description": "A list of templates to use to search for work files."
         }
-        schema["Mipmap Extensions"] = {
-            "type": "list",
-            "values": {
-                "type": "str",
-                "description": ""
-            },
-            "default_value": [],
-            "allows_empty": True,
-            "description": "A list of extensions for which mipmaps should be created."
-        }
         return schema
 
 
@@ -126,8 +116,8 @@ class MariSessionCollector(HookBaseClass):
             return items
 
         if not self.__projectmanager_app:
-            self.logger.error("Unable to process item '%s' without "
-                    "the tk-mari-projectmanager app!" % item.name)
+            self.logger.error("Unable to process items under '%s' without "
+                    "the tk-mari-projectmanager app!" % parent_item.name)
             return items
 
         # create an item representing the current mari session
@@ -183,7 +173,6 @@ class MariSessionCollector(HookBaseClass):
 
         layers_item = None
         thumbnail = self._extract_mari_thumbnail()
-        mipmap_extensions = settings["Mipmap Extensions"].value
 
         # Look for all layers for all channels on all geometry.  Create items for both
         # the flattened channel as well as the individual layers
@@ -221,24 +210,6 @@ class MariSessionCollector(HookBaseClass):
 
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
-
-                # for flattened channel, add associated mipmap items
-                for extension in mipmap_extensions:
-                    item_name = "%s, %s (mipmap - %s)" % (geo.name(), channel.name(), extension)
-                    channel_mipmap_item = self._add_item(settings,
-                                                         channel_item,
-                                                         item_name,
-                                                         "mari.mipmap",
-                                                         parent_item.context,
-                                                         properties)
-
-                    channel_mipmap_item.set_thumbnail_from_path(thumbnail)
-                    channel_mipmap_item.thumbnail_enabled = True
-
-                    channel_mipmap_item.properties.fields["extension"] = extension
-
-                    self.logger.info("Collected item: %s" % channel_mipmap_item.name)
-                    items.append(channel_mipmap_item)
 
                 if len(collected_layers) > 0 and layers_item is None:
                     layers_item = self._add_item(settings,
@@ -278,24 +249,6 @@ class MariSessionCollector(HookBaseClass):
 
                     self.logger.info("Collected item: %s" % layer_item.name)
                     items.append(layer_item)
-
-                    # for each layer, add associated mipmap items
-                    for extension in mipmap_extensions:
-                        item_name = "%s, %s (%s mipmap - %s)" % (geo.name(), channel.name(),
-                                                                 layer_name, extension)
-                        layer_mipmap_item = self._add_item(settings,
-                                                           layer_item,
-                                                           item_name,
-                                                           "mari.mipmap",
-                                                           parent_item.context,
-                                                           layer_properties)
-
-                        layer_mipmap_item.set_thumbnail_from_path(thumbnail)
-                        layer_mipmap_item.thumbnail_enabled = True
-                        layer_mipmap_item.properties.fields["extension"] = extension
-
-                        self.logger.info("Collected item: %s" % layer_mipmap_item.name)
-                        items.append(layer_mipmap_item)
 
         return items
 

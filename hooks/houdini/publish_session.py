@@ -37,7 +37,7 @@ class HoudiniSessionPublishPlugin(HookBaseClass):
         }
     }
 
-    def _get_dependency_paths(self, node=None):
+    def _get_dependency_paths(self, task_settings, item, node=None):
         """
         Find all dependency paths for the current node. If no node specified,
         will return all dependency paths for the houdini scene.

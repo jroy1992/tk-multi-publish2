@@ -8,9 +8,9 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights 
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import copy
 import os
-import pprint
-import re
+import traceback
 import OpenImageIO as oiio
 
 import mari
@@ -23,12 +23,21 @@ HookBaseClass = sgtk.get_hook_baseclass()
 
 
 MARI_MIPMAPS_ITEM_TYPE_SETTINGS = {
-    "mari.mipmap": {
+    "mari.channel": {
         "publish_type": "UDIM Image Mipmap",
         "publish_name_template": None,
-        "publish_path_template": None
+        "publish_path_template": None,
+        "publish_extension": None
+    },
+    "mari.texture": {
+        "publish_type": "UDIM Image Mipmap",
+        "publish_name_template": None,
+        "publish_path_template": None,
+        "publish_extension": None
     }
 }
+
+INPUT_PLUGIN_NAME = "Publish Textures"
 
 class MariPublishMipmapsPlugin(HookBaseClass):
     """
@@ -75,7 +84,13 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         as part of its environment configuration.
         """
         schema = super(MariPublishMipmapsPlugin, self).settings_schema
-        schema["Item Type Filters"]["default_value"] = ["mari.mipmap"]
+        schema["Item Type Filters"]["default_value"] = ["mari.channel", "mari.texture"]
+        schema["Item Type Settings"]["values"]["items"]["publish_extension"] = {
+            "type": "str",
+            "default_value": None,
+            "allows_empty": True,
+            "description": "Extension (image format) for which mipmap should be created."
+        }
         schema["Item Type Settings"]["default_value"] = MARI_MIPMAPS_ITEM_TYPE_SETTINGS
         return schema
 
@@ -91,33 +106,13 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         :param item: Item to process
         :returns: True if item is valid, False otherwise.
         """
-
-        geo_name = item.properties.mari_geo_name
-        geo = mari.geo.find(geo_name)
-        if not geo:
-            error_msg = "Failed to find geometry in the project! Validation failed." % geo_name
-            self.logger.error(error_msg)
-            return False
-
-        channel_name = item.properties.mari_channel_name
-        channel = geo.findChannel(channel_name)
-        if not channel:
-            error_msg = "Failed to find channel on geometry! Validation failed." % channel_name
-            self.logger.error(error_msg)
-            return False
-
-        layer_name = item.properties.get("mari_layer_name")
-        if layer_name:
-            layer = channel.findLayer(layer_name)
-            if not layer:
-                error_msg = "Failed to find layer for channel: %s Validation failed." % layer_name
-                self.logger.error(error_msg)
-                return False
+        # TODO: check if Publish Textures plugin was accepted and validated?
+        # heavily dependent on that output
 
         if not super(MariPublishMipmapsPlugin, self).validate(task_settings, item):
             return False
 
-        publish_path = sgtk.util.ShotgunPath.normalize(item.properties.get("publish_path"))
+        publish_path = sgtk.util.ShotgunPath.normalize(item.get_property("publish_path"))
         if not self._valid_for_mipmap_multiimage(publish_path):
             error_msg = "Failed to find OIIO plugin or mipmap not supported for extension: %s " \
                         "Validation failed." % os.path.splitext(publish_path)[-1]
@@ -148,18 +143,22 @@ class MariPublishMipmapsPlugin(HookBaseClass):
             publish_folder = os.path.dirname(target_path)
             ensure_folder_exists(publish_folder)
 
-            # get all associated files if this is a file sequence
-            source_path = item.parent.properties.publish_path
-            seq_path = publisher.util.get_frame_sequence_path(source_path)
-            if seq_path:
-                src_files = publisher.util.get_sequence_path_files(source_path)
-            else:
-                src_files = [source_path]
+            source_path_list = self._get_dependency_paths(task_settings, item)
+            source_paths_expanded = []
+
+            for source_path in source_path_list:
+                # get all associated files if this is a file sequence
+                seq_path = publisher.util.get_frame_sequence_path(source_path)
+                if seq_path:
+                    source_paths_expanded.extend(publisher.util.get_sequence_path_files(source_path))
+                else:
+                    source_paths_expanded.append(source_path)
 
             # write mipmaps for each file in the sequence
-            mipmap_paths = self.create_mipmaps_for_seq(src_files, target_path)
+            mipmap_paths = self.create_mipmaps_for_seq(source_paths_expanded, target_path)
 
         except Exception as e:
+            self.logger.error(traceback.format_exc())
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
 
         self.logger.debug(
@@ -232,3 +231,73 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                                 "'{0}'".format(os.path.splitext(target_path)[-1]))
             return False
         return any((_target.supports("mipmap"), _target.supports("multiimage")))
+
+
+    def _get_publish_path(self, task_settings, item):
+        """
+        Get a publish path for the supplied item with the set extension.
+
+        :param item: The item to determine the publish path for
+
+        :return: A string representing the output path to supply when
+            registering a publish for the supplied item
+
+        Extracts the publish path via the configured publish templates
+        if possible.
+        """
+        extension = task_settings.get("publish_extension")
+        if not extension:
+            raise TankError("publish_extension not set for item: %s" % item.name)
+
+        # override the fields for this plugin, if not already done
+        if not "fields" in item.local_properties:
+            item.local_properties["fields"] = copy.deepcopy(item.get_property("fields"))
+            item.local_properties.fields["extension"] = extension.value
+
+        publish_path = super(MariPublishMipmapsPlugin, self)._get_publish_path(task_settings, item)
+        return publish_path
+
+    def _get_publish_name(self, task_settings, item):
+        """
+        Get a publish name for the supplied item with the set extension.
+
+        :param item: The item to determine the publish name for
+
+        :return: A string representing the published file name
+
+        Uses the path info hook to retrieve the publish name
+        via the configured publish templates if possible.
+        """
+        extension = task_settings.get("publish_extension")
+        if not extension:
+            raise TankError("publish_extension not set for item: %s" % item.name)
+
+        # override the fields for this plugin, if not already done
+        if not "fields" in item.local_properties:
+            item.local_properties["fields"] = copy.deepcopy(item.get_property("fields"))
+            item.local_properties.fields["extension"] = extension.value
+
+        publish_name = super(MariPublishMipmapsPlugin, self)._get_publish_name(task_settings, item)
+        return publish_name
+
+    def _get_dependency_paths(self, task_settings, item):
+        """
+        Find all dependency paths for the current mipmap.
+
+        :return: List of upstream dependency paths
+        """
+        # find the key to access INPUT_PLUGIN_NAME's local_properties
+        # TODO: is there a better way?
+        publish_plugins = self.parent.settings["publish_plugins"]
+        key = None
+        for plugin_item in publish_plugins:
+            if plugin_item["name"] == INPUT_PLUGIN_NAME:
+                key = plugin_item["hook"].value
+                break
+
+        if not key:
+            raise TankError("Publish Mipmaps needs the output of {} to run".format(INPUT_PLUGIN_NAME))
+
+        publish_path_texture = item._local_properties.get(key).get(
+            "publish_path")
+        return [publish_path_texture]
