@@ -211,12 +211,6 @@ class PublishPlugin(HookBaseClass):
             settings_value = copy.deepcopy(task_settings.raw_value)
             settings_schema = copy.deepcopy(task_settings.schema)
 
-            # Delete the item type settings blocks
-            if setting_key in settings_value:
-                del settings_value[setting_key]
-            if setting_key in settings_schema:
-                del settings_schema[setting_key]
-
             # Get the item_type Setting obj
             item_type_setting = task_settings[setting_key].get(item.type)
 
@@ -225,7 +219,12 @@ class PublishPlugin(HookBaseClass):
             settings_schema.update(item_type_setting.schema)
 
             # Create the new task_settings Setting object
-            task_settings = create_setting(task_settings.name, settings_value, settings_schema, publisher)
+            task_settings = create_setting(
+                task_settings.name,
+                settings_value,
+                settings_schema,
+                task_settings.bundle
+            )
 
         # Else, warn the user...
         else:
@@ -309,7 +308,7 @@ class PublishPlugin(HookBaseClass):
         for attr in attr_list:
             try:
                 method = getattr(self, "_get_%s" % attr)
-                item.properties[attr] = method(item, task_settings)
+                item.properties[attr] = method(task_settings, item)
             except Exception:
                 self.logger.error(
                     "Unable to determine '%s' for item: %s" % (attr, item.name),
@@ -433,11 +432,23 @@ class PublishPlugin(HookBaseClass):
         publish_user          = item.get_property("publish_user", default_value=None)
 
         # handle publishing of files first
-        self.publish_files(task_settings, item, publish_path)
+        publish_files = self.publish_files(task_settings, item, publish_path)
+        if "publish_files" not in item.properties:
+            item.properties.publish_files = {}
+        item.properties.publish_files[self.name] = publish_files
 
         # symlink the files if it's defined in publish templates
+        publish_symlinks = []
         if publish_symlink_path:
-            self.symlink_publishes(task_settings, item)
+            publish_symlinks = self.symlink_publishes(
+                task_settings,
+                item,
+                publish_path,
+                publish_symlink_path
+            )
+        if "publish_symlinks" not in item.properties:
+            item.properties.publish_symlinks = {}
+        item.properties.publish_symlinks[self.name] = publish_symlinks
 
         # Get any upstream dependency paths
         dependency_paths = item.properties.get("publish_dependency_paths", [])
@@ -655,15 +666,14 @@ class PublishPlugin(HookBaseClass):
         return publisher.util.copy_files(work_files, publish_path, seal_files=seal_files, is_sequence=is_sequence)
 
 
-    def symlink_publishes(self, task_settings, item):
+    def symlink_publishes(self, task_settings, item, publish_path, symlink_path):
         """
-        This method handles symlinking an item's publish_path to publish_symlink_path,
-        assuming publish_symlink_path is already populated.
+        This method handles symlinking an item's publish_path to publish_symlink_path.
+
+        :param publish_path: The source path to link files from
+        :param symlink_path: The dest path to create links at
         """
         publisher = self.parent
-
-        publish_path = item.properties.publish_path
-        symlink_path = item.properties.publish_symlink_path
 
         # ---- get a list of files to be symlinked
         seq_path = publisher.util.get_frame_sequence_path(publish_path)
@@ -722,7 +732,7 @@ class PublishPlugin(HookBaseClass):
         return {k: v for k, v in sg_fields.iteritems() if k not in bad_fields}
 
 
-    def _get_publish_type(self, item, task_settings):
+    def _get_publish_type(self, task_settings, item):
         """
         Get a publish type for the supplied item.
 
@@ -737,11 +747,11 @@ class PublishPlugin(HookBaseClass):
         return publish_type
 
 
-    def _get_publish_path(self, item, task_settings):
+    def _get_publish_path(self, task_settings, item):
         """
         Get a publish path for the supplied item.
 
-        :param item: The item to determine the publish type for
+        :param item: The item to determine the publish path for
 
         :return: A string representing the output path to supply when
             registering a publish for the supplied item
@@ -800,11 +810,11 @@ class PublishPlugin(HookBaseClass):
         return sgtk.util.ShotgunPath.normalize(publish_path)
 
 
-    def _get_publish_symlink_path(self, item, task_settings):
+    def _get_publish_symlink_path(self, task_settings, item):
         """
         Get a publish symlink path for the supplied item.
 
-        :param item: The item to determine the publish type for
+        :param item: The item to determine the publish symlink path for
 
         :return: A string representing the symlink path to supply when
             registering a publish for the supplied item
@@ -856,7 +866,7 @@ class PublishPlugin(HookBaseClass):
         return publish_symlink_path
 
 
-    def _get_publish_version(self, item, task_settings):
+    def _get_publish_version(self, task_settings, item):
         """
         Get the publish version for the supplied item.
 
@@ -869,7 +879,7 @@ class PublishPlugin(HookBaseClass):
             return None
 
         # First see if we can get the publish version from the parent
-        parent_version = self._get_publish_version(item.parent, task_settings)
+        parent_version = self._get_publish_version(task_settings, item.parent)
         if parent_version:
             # Note - this intentionally stomps on any local evaluation as all children
             # should match their parent's publish version number
@@ -879,11 +889,11 @@ class PublishPlugin(HookBaseClass):
         return item.properties.fields.get("version", 1)
 
 
-    def _get_publish_name(self, item, task_settings):
+    def _get_publish_name(self, task_settings, item):
         """
         Get the publish name for the supplied item.
 
-        :param item: The item to determine the publish version for
+        :param item: The item to determine the publish name for
 
         Uses the path info hook to retrieve the publish name.
         """
@@ -940,11 +950,11 @@ class PublishPlugin(HookBaseClass):
         return publish_name
 
 
-    def _get_publish_linked_entity_name(self, item, task_settings):
+    def _get_publish_linked_entity_name(self, task_settings, item):
         """
         Get the linked entity name for the supplied item.
 
-        :param item: The item to determine the publish version for
+        :param item: The item to determine the publish linked entity name for
         """
 
         publisher = self.parent

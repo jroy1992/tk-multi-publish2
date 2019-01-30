@@ -14,7 +14,7 @@ import traceback
 
 import sgtk
 from .instance_base import PluginInstanceBase
-from .setting import *
+from .setting import get_setting_for_context
 
 logger = sgtk.platform.get_logger(__name__)
 
