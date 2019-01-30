@@ -84,7 +84,7 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
         :returns: Dictionary of settings definitions for the app.
         """
         schema = super(FarmWrapperPlugin, self).settings_schema
-        schema.update( {
+        schema.update({
             self._SUBMIT_TO_FARM: {
                 "type": "bool",
                 "default_value": True,
@@ -100,7 +100,7 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
                 "default_value": ["publish"],
                 "description": "The step(s) to run on the farm: ['validate', 'publish']"
             }
-        }
+        })
         return schema
 
     def create_settings_widget(self, parent):
@@ -131,7 +131,8 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
 
         :returns: Dictionary of settings.
         """
-        return {self._SUBMIT_TO_FARM: widget.state}
+        submit_widget = widget.findChild(FarmWrapperWidget)
+        return {self._SUBMIT_TO_FARM: submit_widget.state}
 
     def set_ui_settings(self, widget, settings):
         """
@@ -148,7 +149,9 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
         if len(settings) > 1:
             raise NotImplementedError()
         settings = settings[0]
-        widget.state = settings[self._SUBMIT_TO_FARM]
+
+        submit_widget = widget.findChild(FarmWrapperWidget)
+        submit_widget.state = settings[self._SUBMIT_TO_FARM]
 
     def validate(self, task_settings, item):
         """
