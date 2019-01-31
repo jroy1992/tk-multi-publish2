@@ -105,6 +105,13 @@ class PluginInstanceBase(object):
             )
 
     @property
+    def context(self):
+        """
+        The context for this plugin instance.
+        """
+        return self._context
+
+    @property
     def logger(self):
         """
         The logger used by this plugin instance.
