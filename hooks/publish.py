@@ -216,6 +216,8 @@ class PublishPlugin(HookBaseClass):
 
             # Flatten the setting dictionary with the item_type's settings
             settings_value.update(item_type_setting.raw_value)
+            if "items" not in settings_schema:
+                settings_schema["items"] = {}
             settings_schema["items"].update(item_type_setting.schema.get("items", {}))
 
             # Create the new task_settings Setting object
