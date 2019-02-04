@@ -442,7 +442,7 @@ class FileCollectorPlugin(HookBaseClass):
 
 
     def _add_file_item(self, settings, parent_item, path, is_sequence=False, seq_files=None,
-                    item_name=None, item_type=None, context=None, properties=None):
+                       item_name=None, item_type=None, context=None, properties=None):
         """
         Creates a file item
 
@@ -464,9 +464,10 @@ class FileCollectorPlugin(HookBaseClass):
         if not item_name:
             item_name = publisher.util.get_publish_name(path)
 
+        item_work_path_template = None
         # Lookup this item's item_type from the settings object
         if not item_type:
-            item_type = self._get_item_type_from_settings(settings, path, is_sequence)
+            item_type, item_work_path_template = self._get_item_type_from_settings(settings, path, is_sequence)
 
         # Define the item's properties
         properties = properties or {}
@@ -481,7 +482,12 @@ class FileCollectorPlugin(HookBaseClass):
 
         if not context:
             # See if we can get a resolved work_path_template from the settings object
-            work_path_template = self._get_work_path_template_from_settings(settings, item_type, path)
+            if not item_work_path_template:
+                # get a work_path_template if it is not resolved by item type
+                work_path_template = self._get_work_path_template_from_settings(settings, item_type, path)
+            else:
+                work_path_template = item_work_path_template
+
             if work_path_template:
                 # If defined, attempt to use it and the input path to get the item's initial context
                 context = self._get_item_context_from_path(work_path_template, path, parent_item)
@@ -538,26 +544,56 @@ class FileCollectorPlugin(HookBaseClass):
 
         # default values used if no specific type can be determined
         item_type = "file.unknown"
+        # work_path_template default value is none so it won't create a context for the item
+        work_path_template = None
 
         # keep track if a common type was identified for the extension
         common_type_found = False
 
-        # look for the extension in the common file type info dict
-        for item_type, type_info in settings["Item Types"].value.iteritems():
+        # mapping to track how many item types contain the given extension
+        template_item_type_mapping = dict()
 
+        # look for the extension in the common file type info dict
+        # using the raw value to get a raw work_path_template
+        for current_item_type, type_info in settings["Item Types"].raw_value.iteritems():
+            tmp_work_path_template = None
             if extension in type_info["extensions"]:
+                # match this raw template against all environments
+                if type_info["work_path_template"]:
+                    envs = self.parent.sgtk.pipeline_configuration.get_environments()
+                    template_names_per_env = [
+                        sgtk.platform.resolve_setting_expression(type_info["work_path_template"],
+                                                                 self.parent.engine.instance_name,
+                                                                 env_name) for
+                        env_name in envs]
+
+                    templates_per_env = [self.parent.get_template_by_name(template_name) for template_name in
+                                         template_names_per_env if self.parent.get_template_by_name(template_name)]
+                    for template in templates_per_env:
+                        if template.validate(path):
+                            # we have a match! update the work_path_template
+                            tmp_work_path_template = template.name
+
                 # found the extension in the common types lookup.
                 common_type_found = True
 
                 # If we are dealing with a sequence, first check if we have a
                 # separate definition for a sequence of this type specifically,
                 # and if so, use that instead.
-                if is_sequence and not item_type.endswith(".sequence"):
-                    tmp_type = "%s.%s" % (item_type, "sequence")
+                if is_sequence and not current_item_type.endswith(".sequence"):
+                    tmp_type = "%s.%s" % (current_item_type, "sequence")
                     if tmp_type in settings["Item Types"].value:
+                        template_item_type_mapping[tmp_work_path_template] = tmp_type
                         continue
 
                 # Otherwise, we've found our match
+                template_item_type_mapping[tmp_work_path_template] = current_item_type
+
+        # this should work fine in case there is no work path template defined too
+        # this method gives preference to the first match that we get for any template
+        # also, there should never be a match with more than one templates, since template_from_path will fail.
+        for work_path_template, item_type in template_item_type_mapping.iteritems():
+            if work_path_template:
                 break
 
         if not common_type_found:
@@ -585,7 +621,7 @@ class FileCollectorPlugin(HookBaseClass):
         if is_sequence and not item_type.endswith(".sequence"):
             item_type = "%s.%s" % (item_type, "sequence")
 
-        return item_type
+        return item_type, work_path_template
 
 
     def _get_item_type_info(self, settings, item_type):
