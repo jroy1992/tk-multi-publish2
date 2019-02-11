@@ -8,6 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import fnmatch
 import mimetypes
 import os
 import pprint
@@ -243,15 +244,32 @@ class FileCollectorPlugin(HookBaseClass):
         """
         Helper method to get the work_path_template from the collector settings object.
         """
-        item_info = self._get_item_type_info(settings, item_type)
-        work_path_template = item_info.get("work_path_template")
+        raw_settings = settings["Item Types"].raw_value.get(item_type)
+        raw_work_path_template = raw_settings.get("work_path_template") if raw_settings else None
+
+        matched_work_path_template = None
 
         # If defined, add the work_path_template to the item's properties
-        if work_path_template:
-            work_tmpl = self.parent.get_template_by_name(work_path_template)
-            if not work_tmpl:
-                # this template was not found in the template config!
-                raise TankError("The template '%s' does not exist!" % work_path_template)
+        if raw_work_path_template:
+            envs = self.parent.sgtk.pipeline_configuration.get_environments()
+            template_names_per_env = [
+                sgtk.platform.resolve_setting_expression(raw_work_path_template,
+                                                         self.parent.engine.instance_name,
+                                                         env_name) for
+                env_name in envs]
+
+            templates_per_env = [self.parent.get_template_by_name(template_name) for template_name in
+                                 template_names_per_env if self.parent.get_template_by_name(template_name)]
+            for template in templates_per_env:
+                if template.validate(path):
+                    # we have a match! update the work_path_template
+                    matched_work_path_template = template.name
+
+            if not matched_work_path_template:
+                self.logger.error("Cannot resolve work_path_template. "
+                                  "Path doesn't fit any existing templates for %s template." % raw_work_path_template)
+                # can't error out since we couldn't find any matching template.
+                # raise TankError("The template '%s' does not exist!" % work_path_template)
 
         # Else see if the path matches an existing template
         elif path:
@@ -262,13 +280,13 @@ class FileCollectorPlugin(HookBaseClass):
                 self.logger.warning("Cannot find a matching template for path: %s" % path)
             else:
                 # update the field with correct value so that we can use it everytime for this item
-                work_path_template = work_tmpl.name
+                matched_work_path_template = work_tmpl.name
         else:
             self.logger.warning(
                 "Cannot resolve work_path_template. No 'path' or 'work_path_template' setting specified."
             )
 
-        return work_path_template
+        return matched_work_path_template
 
 
     def _resolve_work_path_template(self, settings, item):
@@ -442,7 +460,7 @@ class FileCollectorPlugin(HookBaseClass):
 
 
     def _add_file_item(self, settings, parent_item, path, is_sequence=False, seq_files=None,
-                    item_name=None, item_type=None, context=None, properties=None):
+                       item_name=None, item_type=None, context=None, properties=None):
         """
         Creates a file item
 
@@ -542,22 +560,51 @@ class FileCollectorPlugin(HookBaseClass):
         # keep track if a common type was identified for the extension
         common_type_found = False
 
-        # look for the extension in the common file type info dict
-        for item_type, type_info in settings["Item Types"].value.iteritems():
+        # mapping to track how many item types contain the given extension
+        template_item_type_mapping = dict()
 
-            if extension in type_info["extensions"]:
+        # look for the extension in the common file type info dict
+        # using the raw value to get a raw work_path_template
+        for current_item_type, type_info in settings["Item Types"].value.iteritems():
+
+            matched_work_path_template = None
+            if any(fnmatch.fnmatch(current_extension, extension) for current_extension in type_info["extensions"]):
+                # match this raw template against all environments, to find a matching template
+                if type_info["work_path_template"]:
+                    envs = self.parent.sgtk.pipeline_configuration.get_environments()
+                    template_names_per_env = [
+                        sgtk.platform.resolve_setting_expression(
+                            settings["Item Types"].raw_value[current_item_type]["work_path_template"],
+                            self.parent.engine.instance_name,
+                            env_name) for env_name in envs
+                    ]
+
+                    templates_per_env = [self.parent.get_template_by_name(template_name) for template_name in
+                                         template_names_per_env if self.parent.get_template_by_name(template_name)]
+                    for template in templates_per_env:
+                        if template.validate(path):
+                            # we have a match! update the work_path_template
+                            matched_work_path_template = template.name
+
                 # found the extension in the common types lookup.
                 common_type_found = True
 
                 # If we are dealing with a sequence, first check if we have a
                 # separate definition for a sequence of this type specifically,
                 # and if so, use that instead.
-                if is_sequence and not item_type.endswith(".sequence"):
-                    tmp_type = "%s.%s" % (item_type, "sequence")
+                if is_sequence and not current_item_type.endswith(".sequence"):
+                    tmp_type = "%s.%s" % (current_item_type, "sequence")
                     if tmp_type in settings["Item Types"].value:
+                        template_item_type_mapping[matched_work_path_template] = tmp_type
                         continue
 
-                # Otherwise, we've found our match
+                template_item_type_mapping[matched_work_path_template] = current_item_type
+
+        # this should work fine in case there is no work path template defined too
+        # this method gives preference to the first match that we get for any template
+        # also, there should never be a match with more than one templates, since template_from_path will fail too.
+        for work_path_template, item_type in template_item_type_mapping.iteritems():
+            if work_path_template:
                 break
 
         if not common_type_found:
