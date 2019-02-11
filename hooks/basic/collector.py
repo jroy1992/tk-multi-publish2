@@ -8,6 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import fnmatch
 import mimetypes
 import os
 import pprint
@@ -567,7 +568,7 @@ class FileCollectorPlugin(HookBaseClass):
         for current_item_type, type_info in settings["Item Types"].value.iteritems():
 
             matched_work_path_template = None
-            if extension in type_info["extensions"]:
+            if any(fnmatch.fnmatch(current_extension, extension) for current_extension in type_info["extensions"]):
                 # match this raw template against all environments, to find a matching template
                 if type_info["work_path_template"]:
                     envs = self.parent.sgtk.pipeline_configuration.get_environments()
