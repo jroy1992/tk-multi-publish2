@@ -17,7 +17,7 @@ HookBaseClass = sgtk.get_hook_baseclass()
 
 
 # A list of input node types to check as dependencies
-_NUKE_INPUTS = ("Read", "ReadGeo2", "Camera2")
+_NUKE_INPUTS = ("Read", "ReadGeo2", "Camera2", "DeepRead")
 
 class NukePublishFilesPlugin(HookBaseClass):
     """
