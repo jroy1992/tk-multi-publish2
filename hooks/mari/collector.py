@@ -167,7 +167,6 @@ class MariSessionCollector(HookBaseClass):
         """
         items = []
 
-        layers_item = None
         thumbnail = self._extract_mari_thumbnail()
 
         # Look for all layers for all channels on all geometry.  Create items for both
