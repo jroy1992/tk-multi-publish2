@@ -43,10 +43,6 @@ MARI_SESSION_ITEM_TYPES = {
         "icon_path": "{self}/hooks/icons/texture.png",
         "type_display": "Layer"    
     },
-    "mari.mipmap": {
-        "icon_path": "{self}/hooks/icons/mari_mipmap.png",
-        "type_display": "Mipmap"
-    },
 }
 
 
@@ -420,7 +416,7 @@ class MariSessionCollector(HookBaseClass):
             else:
                 fields["version"] = 1
 
-        elif item.type in ("mari.channel", "mari.texture", "mari.mipmap"):
+        elif item.type in ("mari.channel", "mari.texture"):
             geo_name     = item.properties.mari_geo_name
             channel_name = item.properties.mari_channel_name
             layer_name   = item.properties.get("mari_layer_name")
