@@ -46,7 +46,7 @@ MARI_SESSION_ITEM_TYPES = {
     "mari.mipmap": {
         "icon_path": "{self}/hooks/icons/mari_mipmap.png",
         "type_display": "Mipmap"
-    }
+    },
 }
 
 
@@ -171,7 +171,6 @@ class MariSessionCollector(HookBaseClass):
         """
         items = []
 
-        layers_item = None
         thumbnail = self._extract_mari_thumbnail()
 
         # Look for all layers for all channels on all geometry.  Create items for both
@@ -197,7 +196,7 @@ class MariSessionCollector(HookBaseClass):
                 properties["mari_channel_name"] = channel_name
 
                 # add item for whole flattened channel:
-                item_name = "%s, %s" % (geo.name(), channel.name())
+                item_name = "%s, %s" % (channel.name(), geo.name())
                 channel_item = self._add_item(settings,
                                               parent_item,
                                               item_name,
@@ -211,12 +210,11 @@ class MariSessionCollector(HookBaseClass):
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
 
-                if len(collected_layers) > 0 and layers_item is None:
-                    layers_item = self._add_item(settings,
-                                                 channel_item,
-                                                 "Texture Channel Layers",
-                                                 "mari.layers")
-                    items.append(layers_item)
+                layers_item = self._add_item(settings,
+                                             channel_item,
+                                             "Texture Channel Layers",
+                                             "mari.layers")
+                items.append(layers_item)
 
                 # add item for each collected layer:
                 found_layer_names = set()
@@ -236,7 +234,7 @@ class MariSessionCollector(HookBaseClass):
                     # Add the layer name as a property as well
                     layer_properties["mari_layer_name"] = layer_name
 
-                    item_name = "%s, %s (%s)" % (geo.name(), channel.name(), layer_name)
+                    item_name = "%s (%s), %s" % (channel.name(), layer_name, geo.name())
                     layer_item = self._add_item(settings,
                                                 layers_item,
                                                 item_name,
