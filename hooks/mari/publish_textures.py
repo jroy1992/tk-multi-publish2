@@ -162,24 +162,9 @@ class MariPublishTexturesPlugin(HookBaseClass):
                     layer.exportImages(path)
 
                 elif len(layers) > 1:
-                    # flatten layers in the channel and publish the flattened layer:
-                    # remember the current channel:
+                    # publish the flattened layer:
                     current_channel = geo.currentChannel()
-                    # duplicate the channel so we don't operate on the original:
-                    duplicate_channel = geo.createDuplicateChannel(channel)
-
-                    try:
-                        # flatten it into a single layer:
-                        flattened_layer = duplicate_channel.flatten()
-                        # export the images for it:
-                        flattened_layer.exportImages(path)
-
-                    finally:
-                        # set the current channel back - not doing this will result in Mari crashing
-                        # when the duplicated channel is removed!
-                        geo.setCurrentChannel(current_channel)
-                        # remove the duplicate channel, destroying the channel and the flattened layer:
-                        geo.removeChannel(duplicate_channel, geo.DESTROY_ALL)
+                    current_channel.exportImagesFlattened(path)
 
                 else:
                     self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())            
