@@ -94,6 +94,12 @@ class MariSessionCollector(HookBaseClass):
             "allows_empty": True,
             "description": "A list of templates to use to search for work files."
         }
+        schema["Collect Layers"] = {
+            "type": "bool",
+            "default_value": False,
+            "allows_empty": True,
+            "description": "Indicates whether layers should be collected for individual export."
+        }
         return schema
 
 
@@ -166,7 +172,7 @@ class MariSessionCollector(HookBaseClass):
         :return:
         """
         items = []
-
+        collect_layers = settings["Collect Layers"].value
         thumbnail = self._extract_mari_thumbnail()
 
         # Look for all layers for all channels on all geometry.  Create items for both
@@ -178,8 +184,8 @@ class MariSessionCollector(HookBaseClass):
                 channel_name = channel.name()
 
                 # find all collected layers:
-                collected_layers = self._find_layers_r(channel.layerList())
-                if not collected_layers:
+                found_layers = self._find_layers_r(channel.layerList())
+                if not found_layers:
                     # no layers to publish!
                     self.logger.warning("Channel '%s' has no layers. The channel will not be collected" % channel_name)
                     continue
@@ -192,7 +198,7 @@ class MariSessionCollector(HookBaseClass):
                 properties["mari_channel_name"] = channel_name
 
                 # add item for whole flattened channel:
-                item_name = "%s, %s" % (channel.name(), geo.name())
+                item_name = "%s, %s" % (channel_name, geo_name)
                 channel_item = self._add_item(settings,
                                               parent_item,
                                               item_name,
@@ -205,44 +211,68 @@ class MariSessionCollector(HookBaseClass):
 
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
+                
+                if collect_layers and len(found_layers) > 1:
+                    items.extend(self._add_layers_to_channel_item(settings,
+                                                                  channel_item,
+                                                                  found_layers,
+                                                                  thumbnail))
 
-                layers_item = self._add_item(settings,
-                                             channel_item,
-                                             "Texture Channel Layers",
-                                             "mari.layers")
-                items.append(layers_item)
+        return items
 
-                # add item for each collected layer:
-                found_layer_names = set()
-                for layer in collected_layers:
-                    
-                    # for now, duplicate layer names aren't allowed!
-                    layer_name = layer.name()
-                    if layer_name in found_layer_names:
-                        # we might want to handle this one day...
-                        self.logger.warning("Duplicate layer name found: %s. Layer will not be exported" % layer_name)
-                        pass
-                    found_layer_names.add(layer_name)
+    def _add_layers_to_channel_item(self, settings, channel_item, layer_list, thumbnail):
+        """
+        Create items for each layer in the given list of layers
+        and parent them under the given channel item
 
-                    # Define the item's properties
-                    layer_properties = copy.deepcopy(properties)
+        :param settings:        Configured settings for this collector
+        :param channel_item:    Channel item to parent created items under
+        :param layer_list:      List of layers found within this channel
+        :param thumbnail:       Path to thumbnail to add to each layer item
 
-                    # Add the layer name as a property as well
-                    layer_properties["mari_layer_name"] = layer_name
+        :return:                List of items created
+        """
+        items = []
+        layers_item = self._add_item(settings,
+                                     channel_item,
+                                     "Texture Channel Layers",
+                                     "mari.layers")
+        items.append(layers_item)
 
-                    item_name = "%s (%s), %s" % (channel.name(), layer_name, geo.name())
-                    layer_item = self._add_item(settings,
-                                                layers_item,
-                                                item_name,
-                                                "mari.texture",
-                                                parent_item.context,
-                                                layer_properties)
+        # add item for each collected layer:
+        found_layer_names = set()
+        for layer in layer_list:
 
-                    layer_item.set_thumbnail_from_path(thumbnail)
-                    layer_item.thumbnail_enabled = True
+            # for now, duplicate layer names aren't allowed!
+            layer_name = layer.name()
+            if layer_name in found_layer_names:
+                # we might want to handle this one day...
+                self.logger.warning(
+                    "Duplicate layer name found: %s. Layer will not be exported" % layer_name)
+                pass
+            found_layer_names.add(layer_name)
 
-                    self.logger.info("Collected item: %s" % layer_item.name)
-                    items.append(layer_item)
+            # Define the item's properties
+            layer_properties = copy.deepcopy(channel_item.properties)
+
+            # Add the layer name as a property as well
+            layer_properties["mari_layer_name"] = layer_name
+
+            item_name = "%s (%s), %s" % (layer_properties["mari_channel_name"],
+                                         layer_name,
+                                         layer_properties["mari_geo_name"])
+            layer_item = self._add_item(settings,
+                                        layers_item,
+                                        item_name,
+                                        "mari.texture",
+                                        channel_item.context,
+                                        layer_properties)
+
+            layer_item.set_thumbnail_from_path(thumbnail)
+            layer_item.thumbnail_enabled = True
+
+            self.logger.info("Collected item: %s" % layer_item.name)
+            items.append(layer_item)
 
         return items
 
