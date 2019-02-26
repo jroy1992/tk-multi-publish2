@@ -181,7 +181,8 @@ class PublishTreeWidget(QtGui.QTreeWidget):
             # TODO: because the context has changed for these items, the attached
             # tasks for the underlying item will be different. make sure the old
             # ones are replaced with the new
-            # self.__rebuild_tasks_r(item)
+            self.__rebuild_tasks_r(item)
+            # already being called in insert item.
             # _init_item_r(item)
 
         # pass 2 - check that there aren't any dangling contexts

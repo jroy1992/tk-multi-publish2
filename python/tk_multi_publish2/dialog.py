@@ -1376,7 +1376,7 @@ class AppDialog(QtGui.QWidget):
                     # this item and all of its descendents in the tree need to
                     # have their plugins reattached given the new context
                     # items_with_new_context.append(top_level_item)
-                    # items_with_new_context.extend([i for i in top_level_item])
+                    # items_with_new_context.extend([i for i in top_level_item.children])
 
                     num_errors = self._progress_handler.pop()
                     sync_required = True
@@ -1390,12 +1390,12 @@ class AppDialog(QtGui.QWidget):
                 # this item and all of its descendents in the tree need to have
                 # their plugins reattached given the new context
                 # items_with_new_context.append(self._current_item)
-                # items_with_new_context.extend([i for i in self._current_item])
+                # items_with_new_context.extend([i for i in self._current_item.children])
 
                 num_errors = self._progress_handler.pop()
                 sync_required = True
 
-        # TODO: attach plugins for the destination context. this is commented
+        # TODO: attach plugins for the destination context. this is commented, coz it is handled in on_context_changed
         # out for now as it is a change in behavior and likely implies some
         # additional things to consider. for example: the drag/drop of items
         # within the tree (which changes context) will need to be updated. will
@@ -1405,7 +1405,7 @@ class AppDialog(QtGui.QWidget):
         # ...
         # for any items that have a new context, rerun plugin attachment so that
         # they are published using the destination context's plugins
-        # self._publish_manager.attach_plugins(items_with_new_context)
+        # self._publish_manager._attach_plugins(items_with_new_context)
 
         if num_errors == 0:
             self._progress_handler.logger.info("Context successfully updated.")
