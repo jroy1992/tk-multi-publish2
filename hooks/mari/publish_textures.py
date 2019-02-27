@@ -163,8 +163,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
 
                 elif len(layers) > 1:
                     # publish the flattened layer:
-                    current_channel = geo.currentChannel()
-                    current_channel.exportImagesFlattened(path)
+                    channel.exportImagesFlattened(path)
 
                 else:
                     self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())            
