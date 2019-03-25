@@ -493,12 +493,13 @@ class PublishPlugin(PluginBase):
     # allows clients to write their own publish plugins while deferring custom
     # UI settings implementations until needed.
 
-    def create_settings_widget(self, parent):
+    def create_settings_widget(self, parent, item):
         """
         Creates a Qt widget, for the supplied parent widget (a container widget
         on the right side of the publish UI).
 
         :param parent: The parent to use for the widget being created
+        :param item: Item for the settings widget is being created
         :return: A QtGui.QWidget or subclass that displays information about
             the plugin and/or editable widgets for modifying the plugin's
             settings.

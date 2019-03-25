@@ -434,7 +434,8 @@ class AppDialog(QtGui.QWidget):
         else:
             logger.debug("Building a custom ui for %s.", new_task_selection.plugin)
             widget = new_task_selection.plugin.run_create_settings_widget(
-                self.ui.task_settings_parent)
+                self.ui.task_settings_parent,
+                item=new_task_selection._items[0]._item)
             self.ui.task_settings.widget = widget
 
         # Update the UI with the settings from the current plugin.
