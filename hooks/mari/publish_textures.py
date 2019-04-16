@@ -117,11 +117,14 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 self.logger.error(error_msg)
                 return False
 
-        all_udims = {patch.udim() for patch in geo.patchList()}
-        selected_udims = {1001 + uv_index for uv_index in item.get_property("uv_index_list", [])}
-        required_udims = all_udims - selected_udims
+        if not item.get_property("uv_index_list"):
+            return True
+        else:
+            all_udims = {patch.udim() for patch in geo.patchList()}
+            selected_udims = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
+            required_udims = all_udims - selected_udims
 
-        return self._validate_udims_to_copy(task_settings, item, required_udims, selected_udims)
+            return self._validate_udims_to_copy(task_settings, item, required_udims, selected_udims)
 
     def _validate_udims_to_copy(self, task_settings, item, required_udims, selected_udims):
         if not required_udims:
@@ -146,6 +149,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                                                      fields=["version_number", "path"],
                                                      order=order,
                                                      limit=1)
+
             if not published_files:
                 self.logger.error(
                     "No previous published files found and UDIM subset selected!",
@@ -193,6 +197,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                             }
                         }
                     )
+                    del item.properties["udim_copy_path_list"]
                     return False
                 item.properties["udim_copy_path_list"].append(udim_path)
 
