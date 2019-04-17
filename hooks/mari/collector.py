@@ -517,7 +517,7 @@ class MariSessionCollector(HookBaseClass):
             else:
                 fields["version"] = 1
 
-        elif item.type in ("mari.channel", "mari.texture", "mari.mipmap"):
+        elif item.type in ("mari.channel", "mari.texture"):
             geo_name     = item.properties.mari_geo_name
             channel_name = item.properties.mari_channel_name
             layer_name   = item.properties.get("mari_layer_name")
