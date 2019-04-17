@@ -565,9 +565,8 @@ class PublishPlugin(HookBaseClass):
         if not sg_publish_data:
             self.undo(task_settings, item)
         else:
-            if not item.get_property("sg_publish_data_list"):
-                item.local_properties["sg_publish_data_list"] = []
-                item.properties["sg_publish_data_list"] = []
+            item.properties.setdefault("sg_publish_data_list", [])
+            item.local_properties.setdefault("sg_publish_data_list", [])
 
             # add the publish data to local and global item properties
             item.local_properties.sg_publish_data_list.append(sg_publish_data)

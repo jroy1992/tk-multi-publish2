@@ -155,8 +155,8 @@ class SessionPublishPlugin(HookBaseClass):
         self._save_session(item.properties.get("path"), item.properties.publish_version, item)
 
         # Store any file/id dependencies
-        item.properties.publish_dependency_paths = self._get_dependency_paths(task_settings, item)
-        item.properties.publish_dependency_ids = self._get_dependency_ids(task_settings, item)
+        item.local_properties["publish_dependency_paths"] = self._get_dependency_paths(task_settings, item)
+        item.local_properties["publish_dependency_ids"] = self._get_dependency_ids(task_settings, item)
 
         super(SessionPublishPlugin, self).publish(task_settings, item)
 
