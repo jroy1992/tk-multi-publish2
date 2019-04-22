@@ -8,6 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights 
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import glob
 import os
 import pprint
 import re
@@ -137,8 +138,6 @@ class MariPublishTexturesPlugin(HookBaseClass):
         udim_copy_path_list = item.get_property("udim_copy_path_list")
 
         if udim_copy_path_list is None:
-            item.properties["udim_copy_path_list"] = []
-
             filters = [["entity", "is", item.context.entity],
                        ["task", "is", item.context.task],
                        ["name", "is", item.properties.publish_name]]
@@ -183,23 +182,28 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 }
             )
 
-            for udim in required_udims:
-                udim_path = publisher.util.get_path_for_frame(latest_published_path, frame_num=udim)
-                if not os.path.exists(udim_path):
-                    self.logger.error(
-                        "UDIM {} not selected and not previously published!".format(udim),
-                        extra={
-                            "action_show_more_info": {
-                                "label": "Show Error",
-                                "tooltip": "Show more info",
-                                "text": "Previous publish path not found on disk:\n{}\nPlease select "
-                                        "UDIM {} to export it from this session.".format(udim_path, udim)
-                            }
+
+            udim_pattern = publisher.util.get_path_for_frame(latest_published_path, "*")
+            udim_files = glob.glob(udim_pattern)
+            available_udims = {int(publisher.util.get_frame_number(path)) for path in udim_files}
+            non_available_udims = required_udims - available_udims
+
+            if non_available_udims:
+                self.logger.error(
+                    "Some UDIMs not selected and not previously published!",
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Error",
+                            "tooltip": "Show more info",
+                            "text": "Previous publish path not found on disk:\n{}\nfor UDIMs {}.\n"
+                                    "Please select them to export from this session.".format(
+                                udim_pattern, non_available_udims)
                         }
-                    )
-                    del item.properties["udim_copy_path_list"]
-                    return False
-                item.properties["udim_copy_path_list"].append(udim_path)
+                    }
+                )
+                return False
+            else:
+                item.properties["udim_copy_path_list"] = udim_files
 
         return True
 
