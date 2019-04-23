@@ -19,6 +19,7 @@ import uuid
 import mari
 import sgtk
 from sgtk import TankError
+from sgtk.platform.qt import QtGui
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -175,11 +176,21 @@ class MariSessionCollector(HookBaseClass):
         collect_layers = settings["Collect Layers"].value
         thumbnail = self._extract_mari_thumbnail()
 
+        # TODO: should be replaced by create_settings_widget?
+        geo_udim_selection = {}
+
         # Look for all layers for all channels on all geometry.  Create items for both
         # the flattened channel as well as the individual layers
         for geo in mari.geo.list():
             geo_name = geo.name()
-            
+
+            uv_index_list = []
+            selected_patches = geo.selectedPatches()
+            if selected_patches:
+                uv_index_list = [patch.uvIndex() for patch in selected_patches]
+                # TODO: should be replaced by create_settings_widget?
+                geo_udim_selection[geo_name] = [patch.udim() for patch in selected_patches]
+
             for channel in geo.channelList():
                 channel_name = channel.name()
 
@@ -196,6 +207,9 @@ class MariSessionCollector(HookBaseClass):
                 # Add the geo and channel names as properties
                 properties["mari_geo_name"] = geo_name
                 properties["mari_channel_name"] = channel_name
+
+                # Add selected uv_index_list
+                properties["uv_index_list"] = uv_index_list
 
                 # add item for whole flattened channel:
                 item_name = "%s, %s" % (channel_name, geo_name)
@@ -217,6 +231,31 @@ class MariSessionCollector(HookBaseClass):
                                                                   channel_item,
                                                                   found_layers,
                                                                   thumbnail))
+
+        # TODO: should be replaced by create_settings_widget?
+        if geo_udim_selection:
+            udim_selection_str = "\n".join(["\t{}: {}".format(geo, udims)
+                                            for geo, udims in geo_udim_selection.items()])
+            self.logger.warning(
+                "Only selected UDIMs will be published!",
+                extra={
+                    "action_show_more_info": {
+                        "label": "Show Info",
+                        "tooltip": "Show more info",
+                        "text": "UDIMs to be exported from current session:\n{}\n"
+                                "Any remaining will be copied from the previous version "
+                                "that was published.".format(udim_selection_str)
+                    }
+                }
+            )
+
+            message_str = "UDIMs selected per geometry:\n"
+            message_str += udim_selection_str
+            message_str += "\n\nOnly selected UDIMs will be exported (rest copied from previous version). " \
+                           "If you want to export all, please deselect any patches in the geo " \
+                           "and hit the refresh button at the bottom."
+
+            QtGui.QMessageBox.information(None, "UDIMs selected for export", message_str)
 
         return items
 

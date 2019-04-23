@@ -8,6 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights 
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import glob
 import os
 import pprint
 import re
@@ -92,6 +93,8 @@ class MariPublishTexturesPlugin(HookBaseClass):
         :param item: Item to process
         :returns: True if item is valid, False otherwise.
         """
+        if not super(MariPublishTexturesPlugin, self).validate(task_settings, item):
+            return False
 
         geo_name = item.properties.mari_geo_name
         geo = mari.geo.find(geo_name)
@@ -115,8 +118,94 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 self.logger.error(error_msg)
                 return False
 
-        return super(MariPublishTexturesPlugin, self).validate(task_settings, item)
+        if not item.get_property("uv_index_list"):
+            return True
+        else:
+            all_udims = {patch.udim() for patch in geo.patchList()}
+            selected_udims = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
+            required_udims = all_udims - selected_udims
 
+            return self._validate_udims_to_copy(task_settings, item, required_udims, selected_udims)
+
+    def _validate_udims_to_copy(self, task_settings, item, required_udims, selected_udims):
+        if not required_udims:
+            # nothing to be copied, so everything is okay
+            return True
+
+        publisher = self.parent
+
+        # find prev published version path
+        udim_copy_path_list = item.get_property("udim_copy_path_list")
+
+        if udim_copy_path_list is None:
+            filters = [["entity", "is", item.context.entity],
+                       ["task", "is", item.context.task],
+                       ["name", "is", item.properties.publish_name]]
+            order = [{'field_name': 'version_number', 'direction': 'desc'}]
+
+            published_files = publisher.shotgun.find("PublishedFile",
+                                                     filters,
+                                                     fields=["version_number", "path"],
+                                                     order=order,
+                                                     limit=1)
+
+            if not published_files:
+                self.logger.error(
+                    "No previous published files found and UDIM subset selected!",
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Error",
+                            "tooltip": "Show more info",
+                            "text": "No previous published files found for `{}` to copy UDIMs from. "
+                                    "You need to publish all UDIMs atleast once for this item.\n"
+                                    "Please select all or no UDIMs and hit reload to "
+                                    "retry publishing".format(item.properties.publish_name)
+                        }
+                    }
+                )
+                return False
+
+            latest_published_path = published_files[0]['path']['local_path_linux']
+
+            self.logger.warning(
+                "Some UDIMs to be exported and others copied!",
+                extra = {
+                    "action_show_more_info": {
+                        "label": "Show Info",
+                        "tooltip": "Show more info",
+                        "text": "UDIMs to be exported from current session: {}\n"
+                                "UDIMs to be copied: {}\n"
+                                "They will be copied from {}".format(', '.join(map(str, selected_udims)),
+                                                                     ', '.join(map(str, required_udims)),
+                                                                     latest_published_path)
+                    }
+                }
+            )
+
+
+            udim_pattern = publisher.util.get_path_for_frame(latest_published_path, "*")
+            udim_files = glob.glob(udim_pattern)
+            available_udims = {int(publisher.util.get_frame_number(path)) for path in udim_files}
+            non_available_udims = required_udims - available_udims
+
+            if non_available_udims:
+                self.logger.error(
+                    "Some UDIMs not selected and not previously published!",
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Error",
+                            "tooltip": "Show more info",
+                            "text": "Previous publish path not found on disk:\n{}\nfor UDIMs {}.\n"
+                                    "Please select them to export from this session.".format(
+                                udim_pattern, non_available_udims)
+                        }
+                    }
+                )
+                return False
+            else:
+                item.properties["udim_copy_path_list"] = udim_files
+
+        return True
 
     def publish_files(self, task_settings, item, publish_path):
         """
@@ -128,7 +217,6 @@ class MariPublishTexturesPlugin(HookBaseClass):
         :param item: Item to process
         :param publish_path: The output path to publish files to
         """
-        publisher = self.parent
 
         # get the path in a normalized state. no trailing separator, separators
         # are appropriate for current os, no double separators, etc.
@@ -143,12 +231,12 @@ class MariPublishTexturesPlugin(HookBaseClass):
             channel_name    = item.properties.mari_channel_name
             layer_name      = item.properties.get("mari_layer_name")
 
-            geo = mari.geo.find(geo_name)        
+            geo = mari.geo.find(geo_name)
             channel = geo.findChannel(channel_name)
 
             if layer_name:
                 layer = channel.findLayer(layer_name)
-                layer.exportImages(path)
+                layer.exportImages(path, UVIndexList=item.get_property("uv_index_list", []))
 
             else:
                 # publish the entire channel, flattened
@@ -159,14 +247,17 @@ class MariPublishTexturesPlugin(HookBaseClass):
                     # with only a single layer would cause Mari to crash - this bug was not reproducible by
                     # us but happened 100% for the client!
                     layer = layers[0]
-                    layer.exportImages(path)
+                    layer.exportImages(path, UVIndexList=item.get_property("uv_index_list", []))
 
                 elif len(layers) > 1:
                     # publish the flattened layer:
-                    channel.exportImagesFlattened(path)
+                    channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list", []))
 
                 else:
-                    self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())            
+                    self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
+
+            # after export is completed, try to copy over the udims from previous publish
+            self._copy_udims(task_settings, item, publish_path)
 
         except Exception as e:
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
@@ -176,3 +267,17 @@ class MariPublishTexturesPlugin(HookBaseClass):
         )
 
         return [path]
+
+    def _copy_udims(self, task_settings, item, publish_path):
+        # this property should be created in validate
+        udim_copy_path_list = item.get_property("udim_copy_path_list")
+
+        # if empty, assume all udims were exported and nothing needs to be copied
+        if not udim_copy_path_list:
+            return True
+
+        publisher = self.parent
+        seal_files = item.properties.get("seal_files", False)
+
+        return publisher.util.copy_files(udim_copy_path_list, publish_path, seal_files=seal_files,
+                                         is_sequence=True)
