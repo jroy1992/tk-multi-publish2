@@ -17,6 +17,7 @@ import traceback
 import sgtk
 from sgtk import TankError
 from sgtk.platform import create_setting
+from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -772,6 +773,12 @@ class PublishPlugin(HookBaseClass):
 
         publish_path_template = task_settings.get("publish_path_template").value
         publish_path = item.properties.get("path")
+
+        # if item is not a sequence, set all sequence keys explicitly to None
+        if not item.get_property("is_sequence"):
+            for key in publish_path_template.keys.values():
+                if isinstance(key, SequenceKey):
+                    fields[key.name] = None
 
         # If a template is defined, get the publish path from it
         if publish_path_template:
