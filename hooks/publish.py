@@ -774,11 +774,6 @@ class PublishPlugin(HookBaseClass):
         publish_path_template = task_settings.get("publish_path_template").value
         publish_path = item.properties.get("path")
 
-        # if item is not a sequence, set all sequence keys explicitly to None
-        if not item.get_property("is_sequence"):
-            for key in publish_path_template.keys.values():
-                if isinstance(key, SequenceKey):
-                    fields[key.name] = None
 
         # If a template is defined, get the publish path from it
         if publish_path_template:
@@ -788,6 +783,12 @@ class PublishPlugin(HookBaseClass):
                 # this template was not found in the template config!
                 raise TankError("The Template '%s' does not exist!" % publish_path_template)
 
+            # if item is not a sequence, set all sequence keys explicitly to None
+            if not item.get_property("is_sequence"):
+                for key in pub_tmpl.keys.values():
+                    if isinstance(key, SequenceKey):
+                        fields[key.name] = None
+                        
             # First get the fields from the context
             try:
                 fields.update(item.context.as_template_fields(pub_tmpl))
