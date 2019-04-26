@@ -17,6 +17,7 @@ import traceback
 import sgtk
 from sgtk import TankError
 from sgtk.platform import create_setting
+from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -780,6 +781,12 @@ class PublishPlugin(HookBaseClass):
             if not pub_tmpl:
                 # this template was not found in the template config!
                 raise TankError("The Template '%s' does not exist!" % publish_path_template)
+
+            # if item is not a sequence, set all sequence keys explicitly to None
+            if not item.get_property("is_sequence"):
+                for key in pub_tmpl.keys.values():
+                    if isinstance(key, SequenceKey):
+                        fields[key.name] = None
 
             # First get the fields from the context
             try:
