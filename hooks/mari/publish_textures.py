@@ -93,6 +93,8 @@ class MariPublishTexturesPlugin(HookBaseClass):
         :param item: Item to process
         :returns: True if item is valid, False otherwise.
         """
+        # textures should always contain UDIM or tag <UDIM>
+        item.properties["is_sequence"] = True
         if not super(MariPublishTexturesPlugin, self).validate(task_settings, item):
             return False
 

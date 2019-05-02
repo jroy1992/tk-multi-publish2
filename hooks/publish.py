@@ -354,7 +354,7 @@ class PublishPlugin(HookBaseClass):
             )
             return False
 
-        if item.properties.get("is_sequence"):
+        if item.properties.get("is_sequence") and item.properties.get("path"):
             path = publisher.util.get_path_for_frame(item.properties.path, "*")
             publish_path = publisher.util.get_path_for_frame(item.properties.publish_path, "*")
         else:
