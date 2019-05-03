@@ -307,8 +307,8 @@ class MariSessionCollector(HookBaseClass):
             # skip layers with invalid names
             layer_template_key = self.sgtk.template_keys["layer"]
             if not layer_template_key.validate(layer_name):
-                self.logger.warning("Channel '%s' does not conform to sgtk naming. "
-                                    "The channel will not be collected" % layer_name)
+                self.logger.warning("Layer '%s' does not conform to sgtk naming. "
+                                    "The layer will not be collected" % layer_name)
                 continue
 
 
