@@ -200,6 +200,13 @@ class MariSessionCollector(HookBaseClass):
             for channel in geo.channelList():
                 channel_name = channel.name()
 
+                # skip channels with invalid names
+                channel_template_key = self.sgtk.template_keys["channel"]
+                if not channel_template_key.validate(channel_name):
+                    self.logger.warning("Channel '%s' does not conform to sgtk naming. "
+                                        "The channel will not be collected" % channel_name)
+                    continue
+
                 # find all collected layers:
                 found_layers = self._find_layers_r(channel.layerList())
                 if not found_layers:
@@ -288,13 +295,23 @@ class MariSessionCollector(HookBaseClass):
         found_layer_names = set()
         for layer in layer_list:
 
-            # for now, duplicate layer names aren't allowed!
             layer_name = layer.name()
+
+            # for now, duplicate layer names aren't allowed!
             if layer_name in found_layer_names:
                 # we might want to handle this one day...
                 self.logger.warning(
                     "Duplicate layer name found: %s. Layer will not be exported" % layer_name)
-                pass
+                continue
+
+            # skip layers with invalid names
+            layer_template_key = self.sgtk.template_keys["layer"]
+            if not layer_template_key.validate(layer_name):
+                self.logger.warning("Channel '%s' does not conform to sgtk naming. "
+                                    "The channel will not be collected" % layer_name)
+                continue
+
+
             found_layer_names.add(layer_name)
 
             # Define the item's properties
