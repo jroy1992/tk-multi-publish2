@@ -184,6 +184,12 @@ class MariSessionCollector(HookBaseClass):
         for geo in mari.geo.list():
             geo_name = geo.name()
 
+            # skip any non-sgtk compliant geometries
+            geo_sg_metadata = self.parent.engine.get_shotgun_info(geo)
+            if not geo_sg_metadata:
+                self.logger.warning("{} is not an sgtk geometry. Ignoring it.".format(geo_name))
+                continue
+
             uv_index_list = []
             selected_patches = geo.selectedPatches()
             if selected_patches:
