@@ -211,6 +211,9 @@ class MariSessionCollector(HookBaseClass):
                 # Add selected uv_index_list
                 properties["uv_index_list"] = uv_index_list
 
+                # textures should always contain UDIM or tag <UDIM>
+                properties["is_sequence"] = True
+
                 # add item for whole flattened channel:
                 item_name = "%s, %s" % (channel_name, geo_name)
                 channel_item = self._add_item(settings,
