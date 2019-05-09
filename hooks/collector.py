@@ -12,6 +12,7 @@ import copy
 import datetime
 import urllib
 import sgtk
+from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -238,5 +239,11 @@ class CollectorPlugin(HookBaseClass):
         elif item.context.task:
             name_field = item.context.task["name"]
             fields["name"] = urllib.quote(name_field.replace(" ", "_").lower(), safe='')
+
+        # if item is not a sequence, set all sequence keys explicitly to None
+        if not item.get_property("is_sequence"):
+            for key in self.sgtk.template_keys.values():
+                if isinstance(key, SequenceKey):
+                    fields[key.name] = None
 
         return fields
