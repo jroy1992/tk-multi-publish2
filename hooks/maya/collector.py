@@ -15,6 +15,7 @@ import traceback
 import maya.cmds as cmds
 import sgtk
 from sgtk import TankError
+from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -274,6 +275,11 @@ class MayaSessionCollector(HookBaseClass):
         # Start with the item's fields, minus extension
         fields = copy.deepcopy(parent_item.properties.get("fields", {}))
         fields.pop("extension", None)
+
+        # also collect sequence files
+        for key in self.sgtk.template_keys.values():
+            if isinstance(key, SequenceKey):
+                fields.pop(key.name)
 
         work_tmpl = publisher.get_template_by_name(work_path_template)
         if not work_tmpl:
