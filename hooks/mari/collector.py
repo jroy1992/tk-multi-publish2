@@ -10,15 +10,13 @@
 
 import os
 import copy
-import glob
-import pprint
 import tempfile
-import urllib
 import uuid
 
 import mari
 import sgtk
 from sgtk import TankError
+from sgtk.templatekey import SequenceKey
 from sgtk.platform.qt import QtGui
 
 HookBaseClass = sgtk.get_hook_baseclass()
@@ -458,6 +456,11 @@ class MariSessionCollector(HookBaseClass):
         # Start with the item's fields, minus extension
         fields = copy.deepcopy(parent_item.properties.get("fields", {}))
         fields.pop("extension", None)
+
+        # also collect sequence files
+        for key in self.sgtk.template_keys.values():
+            if isinstance(key, SequenceKey):
+                fields.pop(key.name)
 
         work_tmpl = publisher.get_template_by_name(work_path_template)
         if not work_tmpl:
