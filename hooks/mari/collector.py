@@ -17,7 +17,7 @@ import mari
 import sgtk
 from sgtk import TankError
 from sgtk.templatekey import SequenceKey
-from sgtk.platform.qt import QtGui
+from sgtk.platform.qt import QtCore, QtGui
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -188,7 +188,7 @@ class MariSessionCollector(HookBaseClass):
                 self.logger.warning("{} is not an sgtk geometry. Ignoring it.".format(geo_name))
                 continue
 
-            uv_index_list = []
+            uv_index_list = None
             selected_patches = geo.selectedPatches()
             if selected_patches:
                 uv_index_list = [patch.uvIndex() for patch in selected_patches]
@@ -271,6 +271,9 @@ class MariSessionCollector(HookBaseClass):
 
             QtGui.QMessageBox.information(None, "UDIMs selected for export", message_str)
 
+        # get user input on whether to copy or export each channel
+        # TODO: should be replaced by create_settings_widget?
+        items = self.copy_or_export_channels(items)
         return items
 
     def _add_layers_to_channel_item(self, settings, channel_item, layer_list, thumbnail):
@@ -520,7 +523,6 @@ class MariSessionCollector(HookBaseClass):
             layer_name   = item.properties.get("mari_layer_name")
 
             geo = mari.geo.find(geo_name)
-            channel = geo.findChannel(channel_name)
 
             # For the sake of brevity, only set the node name if the geo entity
             # is different than the context entity, or there are more than one geos
@@ -534,3 +536,159 @@ class MariSessionCollector(HookBaseClass):
             fields["UDIM"] = "FORMAT: $UDIM"
 
         return fields
+
+    def copy_or_export_channels(self, items):
+        item_type_dict = {}
+        for item in items:
+            item_type_list =  item_type_dict.setdefault(item.type, [])
+            item_type_list.append(item)
+        copy_or_export_channels_ui = CopyOrExportChannels(item_type_dict["mari.channel"])
+
+        return items
+
+
+# TODO: should be replaced by create_settings_widget?
+class CopyOrExportChannels(object):
+    def __init__(self, items):
+        self.copy_text = "Copy"
+        self.export_text = "Export"
+
+        self.items = items
+        self.row_button_grp_dict = {}
+
+        self.dialog = None
+        self.channel_layout = None
+
+        self.create_ui()
+
+    def add_checkable(self, label):
+        """
+        Add a checkable UI element to the main layout and add
+        Copy or Export radiobutton options.
+        Save the radiobutton group in row_button_grp_dict for later access.
+
+        :param label: label for the checkable element
+        """
+        row_idx = self.channel_layout.count()
+
+        copy_rb = QtGui.QRadioButton(self.copy_text)
+        export_rb = QtGui.QRadioButton(self.export_text)
+        export_rb.setChecked(True)
+
+        radio_button_layout = QtGui.QHBoxLayout()
+        radio_button_layout.addWidget(copy_rb)
+        radio_button_layout.addWidget(export_rb)
+
+        group_box = QtGui.QGroupBox(label)
+        group_box.setMaximumHeight(55)
+        group_box.setLayout(radio_button_layout)
+        group_box.setCheckable(True)
+
+        button_group = QtGui.QButtonGroup(radio_button_layout)
+        button_group.addButton(copy_rb)
+        button_group.addButton(export_rb)
+        # save the button group for later access
+        self.row_button_grp_dict[row_idx] = button_group
+
+        self.channel_layout.addWidget(group_box)
+
+    def ok_button_cb(self):
+        """
+        Close the dialog box, and modify item sttributes/properties
+        according to user input
+        """
+        # close dialog
+        self.dialog.close()
+
+        # extract and process data from user selection
+        for row_idx in range(self.channel_layout.count()):
+            group_box = self.channel_layout.itemAt(row_idx).widget()
+            item = self.items[row_idx]
+
+            if group_box.isChecked():
+                button_grp = self.row_button_grp_dict[row_idx]
+                if button_grp.checkedButton().text() == self.copy_text:
+                    self._set_uv_index_list_r(item, [])
+            else:
+                # this automatically propagates to the children
+                item.checked = False
+
+    def set_channel_check_status(self, status):
+        for row_idx in range(self.channel_layout.count()):
+            group_box = self.channel_layout.itemAt(row_idx).widget()
+            group_box.setChecked(status)
+
+    def create_ui(self):
+        """
+        Create a dialog with the list of items received on object initialisation and,
+        based on the choice to publish or not, and to copy or export,
+        modify the properties of each item
+        """
+        # create dialog
+        self.dialog = QtGui.QDialog()
+        self.dialog.setWindowTitle('Copy or Export Channels')
+        self.dialog.setMinimumWidth(600)
+        # show only title (no close button)
+        self.dialog.setWindowFlags(QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowTitleHint)
+
+        main_layout = QtGui.QVBoxLayout(self.dialog)
+        # add usage instructions
+        instruction_label = QtGui.QLabel("Select the channels to be published.\n"
+                             "Choose `Copy` to copy the channel from previous publish.\n"
+                             "Choose `Export` to export it from the current Mari session.\n")
+        instruction_label.setFrameStyle(QtGui.QFrame.StyledPanel)
+        instruction_label.setMaximumHeight(60)
+        instruction_label.setContentsMargins(1, 5, 1, 5)
+        main_layout.addWidget(instruction_label)
+
+        channels_heading_label = QtGui.QLabel("Channels:")
+        channels_heading_label.setMaximumHeight(20)
+        channels_heading_label.setContentsMargins(1, 5, 1, 5)
+        main_layout.addWidget(channels_heading_label)
+
+        # add scroll area for item list
+        self.channel_layout = QtGui.QVBoxLayout()
+        scroll_widget = QtGui.QWidget()
+        scroll_widget.setLayout(self.channel_layout)
+
+        channel_scroll_area = QtGui.QScrollArea()
+        channel_scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        channel_scroll_area.setWidgetResizable(True)
+        channel_scroll_area.setWidget(scroll_widget)
+
+        main_layout.addWidget(channel_scroll_area)
+
+        # add checkbox per item
+        for item in self.items:
+            self.add_checkable(item.name)
+
+        # add select all/none and OK buttons
+        select_all_button = QtGui.QPushButton("Select All")
+        select_all_button.setMaximumWidth(120)
+        select_all_button.clicked.connect(lambda: self.set_channel_check_status(True))
+
+        select_none_button = QtGui.QPushButton("Select None")
+        select_none_button.setMaximumWidth(120)
+        select_none_button.clicked.connect(lambda: self.set_channel_check_status(False))
+
+        ok_button = QtGui.QPushButton("OK")
+        ok_button.setMinimumWidth(75)
+        ok_button.clicked.connect(self.ok_button_cb)
+
+        button_layout = QtGui.QHBoxLayout()
+        button_layout.addWidget(select_all_button)
+        button_layout.addWidget(select_none_button)
+        button_layout.addStretch()
+        button_layout.addWidget(ok_button)
+
+        main_layout.addLayout(button_layout)
+        self.dialog.exec_()
+
+    def _set_uv_index_list_r(self, item, uv_index_list):
+        """
+        Set the "uv_index_list" property on an item and all its
+        children recursively to the given list.
+        """
+        item.properties["uv_index_list"] = uv_index_list
+        for child in item.children:
+            self._set_uv_index_list_r(child, uv_index_list)
