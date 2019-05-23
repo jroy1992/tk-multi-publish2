@@ -118,7 +118,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 self.logger.error(error_msg)
                 return False
 
-        if not item.get_property("uv_index_list"):
+        if item.get_property("uv_index_list") is None:
             return True
         else:
             all_udims = {patch.udim() for patch in geo.patchList()}
@@ -168,7 +168,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             latest_published_path = published_files[0]['path']['local_path_linux']
 
             self.logger.warning(
-                "Some UDIMs to be exported and others copied!",
+                "Some UDIMs to be copied from previous publish!",
                 extra = {
                     "action_show_more_info": {
                         "label": "Show Info",
@@ -234,27 +234,28 @@ class MariPublishTexturesPlugin(HookBaseClass):
             geo = mari.geo.find(geo_name)
             channel = geo.findChannel(channel_name)
 
-            if layer_name:
-                layer = channel.findLayer(layer_name)
-                layer.exportImages(path, UVIndexList=item.get_property("uv_index_list", []))
-
-            else:
-                # publish the entire channel, flattened
-                layers = channel.layerList()
-                if len(layers) == 1:
-                    # only one layer so just publish it:
-                    # Note - this works around an issue that was reported (#27945) where flattening a channel
-                    # with only a single layer would cause Mari to crash - this bug was not reproducible by
-                    # us but happened 100% for the client!
-                    layer = layers[0]
-                    layer.exportImages(path, UVIndexList=item.get_property("uv_index_list", []))
-
-                elif len(layers) > 1:
-                    # publish the flattened layer:
-                    channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list", []))
+            if item.get_property("uv_index_list") is not []:
+                if layer_name:
+                    layer = channel.findLayer(layer_name)
+                    layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
 
                 else:
-                    self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
+                    # publish the entire channel, flattened
+                    layers = channel.layerList()
+                    if len(layers) == 1:
+                        # only one layer so just publish it:
+                        # Note - this works around an issue that was reported (#27945) where flattening a channel
+                        # with only a single layer would cause Mari to crash - this bug was not reproducible by
+                        # us but happened 100% for the client!
+                        layer = layers[0]
+                        layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+
+                    elif len(layers) > 1:
+                        # publish the flattened layer:
+                        channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list") or [])
+
+                    else:
+                        self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
 
             # after export is completed, try to copy over the udims from previous publish
             self._copy_udims(task_settings, item, publish_path)
