@@ -542,7 +542,16 @@ class MariSessionCollector(HookBaseClass):
         for item in items:
             item_type_list =  item_type_dict.setdefault(item.type, [])
             item_type_list.append(item)
-        copy_or_export_channels_ui = CopyOrExportChannels(item_type_dict["mari.channel"])
+
+        if not item_type_dict.get("mari.channel"):
+            self.logger.warning("No textures to be published from this session!")
+            QtGui.QMessageBox.warning(None, "No channels to export!",
+                                      "No textures found to export from this session! "
+                                      "Ensure you have atleast one sgtk loaded geometry and "
+                                      "it has atleast one channel with proper naming, or "
+                                      "continue with publishing just the mari session")
+        else:
+            copy_or_export_channels_ui = CopyOrExportChannels(item_type_dict["mari.channel"])
 
         return items
 
