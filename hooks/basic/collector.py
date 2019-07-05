@@ -67,6 +67,11 @@ DEFAULT_ITEM_TYPES = {
         "icon_path": "{self}/hooks/icons/image.png",
         "type_display": "Rendered Image"
     },
+    "file.deep_render": {
+        "extensions": ["exr", "dtex"],
+        "icon_path": "{self}/hooks/icons/image.png",
+        "type_display": "Deep Rendered Image"
+    },
     "file.texture": {
         "extensions": ["tif", "tiff", "tx", "tga", "dds", "rat"],
         "icon_path": "{self}/hooks/icons/texture.png",
@@ -266,8 +271,8 @@ class FileCollectorPlugin(HookBaseClass):
                     matched_work_path_template = template.name
 
             if not matched_work_path_template:
-                self.logger.error("Cannot resolve work_path_template. "
-                                  "Path doesn't fit any existing templates for %s template." % raw_work_path_template)
+                self.logger.warning("Cannot resolve work_path_template. "
+                                    "Path doesn't fit any existing templates for %s template." % raw_work_path_template)
                 # can't error out since we couldn't find any matching template.
                 # raise TankError("The template '%s' does not exist!" % work_path_template)
 
@@ -815,5 +820,5 @@ def _build_seq_extensions_list():
 
     return list(extensions)
 
-KNOWN_IMAGE_TYPES = ("render", "texture", "image")
+KNOWN_IMAGE_TYPES = ("render", "texture", "image", "deep_render")
 KNOWN_SEQ_EXTENSIONS = _build_seq_extensions_list()

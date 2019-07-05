@@ -66,6 +66,11 @@ DEFAULT_ITEM_TYPE_SETTINGS = {
         "publish_name_template": None,
         "publish_path_template": None
     },
+    "file.deep_render.sequence": {
+        "publish_type": "Deep Rendered Image",
+        "publish_name_template": None,
+        "publish_path_template": None
+    },
     "file.texture": {
         "publish_type": "Texture Image",
         "publish_name_template": None,
