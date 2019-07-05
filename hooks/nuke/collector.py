@@ -35,6 +35,7 @@ NUKE_ITEM_TYPES = {
 # A look up of node types to parameters for finding outputs to publish
 _NUKE_OUTPUTS = {
     "WriteTank": "file",
+    "DeepWrite": "file",
 }
 
 

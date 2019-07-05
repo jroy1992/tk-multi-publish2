@@ -351,6 +351,7 @@ class FileCollectorPlugin(HookBaseClass):
         seq_files = None
         if seq_path:
             seq_files = publisher.util.get_sequence_path_files(seq_path)
+            path = seq_path
             is_sequence = True
 
         display_name = publisher.util.get_publish_name(path)
