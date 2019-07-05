@@ -39,6 +39,9 @@ _NUKE_OUTPUTS = {
     "DeepWrite": "file",
 }
 
+# TODO: define commonly for other plugins, writenode app?
+SG_WRITE_NODE_CLASSES = {"WriteTank", "DeepWriteTank"}
+
 
 class NukeSessionCollector(HookBaseClass):
     """
@@ -51,10 +54,6 @@ class NukeSessionCollector(HookBaseClass):
         """
         # call base init
         super(NukeSessionCollector, self).__init__(parent, **kwargs)
-
-        # import writenode constants
-        tk_nuke_writenode = self.parent.import_module("tk_nuke_writenode")
-        self.sg_write_node_classes = tk_nuke_writenode.TankWriteNodeHandler.NUKE_TO_SG_CLASS_MAPPING.values()
 
         # cache the write node and workfiles apps
         self.__write_node_app = self.parent.engine.apps.get("tk-nuke-writenode")
@@ -267,7 +266,7 @@ class NukeSessionCollector(HookBaseClass):
                 self.logger.info(
                     "Processing %s node: %s" % (node_type, node.name()))
 
-                if node_type in self.sg_write_node_classes:
+                if node_type in SG_WRITE_NODE_CLASSES:
 
                     if not self.__write_node_app:
                         self.logger.error("Unable to process node '%s' without "
@@ -398,7 +397,7 @@ class NukeSessionCollector(HookBaseClass):
         :return: Name of the template.
         """
         node = item.properties.get("node")
-        if node and node.Class() in self.sg_write_node_classes:
+        if node and node.Class() in SG_WRITE_NODE_CLASSES:
             if self.__write_node_app:
                 # Get work_path_template from the write_node app and update fields
                 return self.__write_node_app.get_node_render_template(node).name

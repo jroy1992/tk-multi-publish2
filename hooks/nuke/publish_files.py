@@ -19,6 +19,9 @@ HookBaseClass = sgtk.get_hook_baseclass()
 # A list of input node types to check as dependencies
 _NUKE_INPUTS = ("Read", "ReadGeo2", "Camera2", "DeepRead")
 
+# TODO: define commonly for other plugins, writenode app?
+SG_WRITE_NODE_CLASSES = {"WriteTank", "DeepWriteTank"}
+
 class NukePublishFilesPlugin(HookBaseClass):
     """
     Inherits from PublishFilesPlugin
@@ -29,10 +32,6 @@ class NukePublishFilesPlugin(HookBaseClass):
         """
         # call base init
         super(NukePublishFilesPlugin, self).__init__(parent, **kwargs)
-
-        # import writenode constants
-        tk_nuke_writenode = self.parent.import_module("tk_nuke_writenode")
-        self.sg_write_node_classes = tk_nuke_writenode.TankWriteNodeHandler.NUKE_TO_SG_CLASS_MAPPING.values()
 
         # cache the write node app
         self.__write_node_app = self.parent.engine.apps.get("tk-nuke-writenode")
@@ -68,7 +67,7 @@ class NukePublishFilesPlugin(HookBaseClass):
 
         # If this is a WriteTank node, override task settings from the node
         node = item.properties.get("node")
-        if node and node.Class() in self.sg_write_node_classes:
+        if node and node.Class() in SG_WRITE_NODE_CLASSES:
             if not self.__write_node_app:
                 self.logger.error("Unable to process item '%s' without "
                         "the tk-nuke_writenode app!" % item.name)
@@ -99,7 +98,7 @@ class NukePublishFilesPlugin(HookBaseClass):
 
         # If this is a WriteTank node, check to see if the node path is currently locked
         node = item.properties.get("node")
-        if node and node.Class() in self.sg_write_node_classes:
+        if node and node.Class() in SG_WRITE_NODE_CLASSES:
             if self.__write_node_app.is_node_render_path_locked(node):
                 # renders for the write node can't be published - trying to publish
                 # will result in an error in the publish hook!
