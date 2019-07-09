@@ -35,8 +35,12 @@ NUKE_ITEM_TYPES = {
 # A look up of node types to parameters for finding outputs to publish
 _NUKE_OUTPUTS = {
     "WriteTank": "file",
+    "DeepWriteTank": "file",
     "DeepWrite": "file",
 }
+
+# TODO: define commonly for other plugins, writenode app?
+SG_WRITE_NODE_CLASSES = {"WriteTank", "DeepWriteTank"}
 
 
 class NukeSessionCollector(HookBaseClass):
@@ -262,7 +266,7 @@ class NukeSessionCollector(HookBaseClass):
                 self.logger.info(
                     "Processing %s node: %s" % (node_type, node.name()))
 
-                if node_type == "WriteTank":
+                if node_type in SG_WRITE_NODE_CLASSES:
 
                     if not self.__write_node_app:
                         self.logger.error("Unable to process node '%s' without "
@@ -393,7 +397,7 @@ class NukeSessionCollector(HookBaseClass):
         :return: Name of the template.
         """
         node = item.properties.get("node")
-        if node and node.Class() == "WriteTank":
+        if node and node.Class() in SG_WRITE_NODE_CLASSES:
             if self.__write_node_app:
                 # Get work_path_template from the write_node app and update fields
                 return self.__write_node_app.get_node_render_template(node).name
