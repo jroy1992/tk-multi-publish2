@@ -427,6 +427,8 @@ class AppDialog(QtGui.QWidget):
         if (
             # If we had a selection before
             self._current_tasks and
+            # Also re-build the UI if the selection changes, to enable multi-select updates
+            self._current_tasks == new_task_selection and
             # and it was of the same type as the new one.
             self._current_tasks.is_same_task_type(new_task_selection)
         ):
@@ -435,7 +437,7 @@ class AppDialog(QtGui.QWidget):
             logger.debug("Building a custom ui for %s.", new_task_selection.plugin)
             widget = new_task_selection.plugin.run_create_settings_widget(
                 self.ui.task_settings_parent,
-                item=new_task_selection._items[0]._item)
+                items_and_tasks={task_item._item: task_item for task_item in new_task_selection._items})
             self.ui.task_settings.widget = widget
 
         # Update the UI with the settings from the current plugin.
