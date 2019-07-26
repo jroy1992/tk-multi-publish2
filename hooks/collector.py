@@ -119,14 +119,6 @@ class CollectorPlugin(HookBaseClass):
         type_display = item_info["type_display"]
         icon_path    = item_info["icon_path"]
 
-        # Define the item's properties
-        properties = properties or {}
-
-        # stores the fields resolved from the context
-        properties["context_fields"] = dict()
-        # stores the fields missing on any template
-        properties["missing_keys"] = list()
-
         # create and populate the item
         item = parent_item.create_item(
             item_type,
