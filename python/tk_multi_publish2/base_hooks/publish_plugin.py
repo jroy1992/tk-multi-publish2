@@ -12,6 +12,10 @@ import sgtk
 
 from .base import PluginBase
 
+from sgtk.platform.qt import QtCore, QtGui
+
+HookBaseClass = sgtk.get_hook_baseclass()
+
 
 class PublishPlugin(PluginBase):
     """
@@ -20,6 +24,229 @@ class PublishPlugin(PluginBase):
     plugin. Publish plugins define which items they will operate on as well as
     the execution logic for each phase of the publish process.
     """
+
+    class WidgetBaseClass(QtGui.QWidget):
+        """
+        Base Class for creating any custom settings widgets.
+        """
+
+        def __init__(self, initialization_strategy, plugin, parent, *args):
+            QtGui.QWidget.__init__(self, parent)
+
+            if initialization_strategy:
+                if hasattr(plugin, initialization_strategy):
+                    # call the strategy
+                    getattr(plugin, initialization_strategy)(plugin, parent, *args)
+                else:
+                    plugin.logger.error("Couldn't find initialization strategy named %s." % initialization_strategy)
+
+    class DescriptionWidget(WidgetBaseClass):
+        """
+        Widget to display description.
+        """
+        def __init__(self, initialization_strategy, plugin, parent, *args):
+            super(plugin.DescriptionWidget, self).__init__(initialization_strategy, plugin, parent, *args)
+
+            # The publish plugin that subclasses this will implement the
+            # `description` property. We'll use that here to display the plugin's
+            # description in a label.
+            description_label = QtGui.QLabel(plugin.description)
+            description_label.setWordWrap(True)
+            description_label.setOpenExternalLinks(True)
+
+            # create the layout to use within the group box
+            description_layout = QtGui.QVBoxLayout()
+            description_layout.addWidget(description_label)
+            description_layout.addStretch()
+            self.setLayout(description_layout)
+
+    class PropertiesWidgetHandler(object):
+        """
+        Shows the editor widget with a label or checkbox depending on whether
+        the widget is in multi-edit mode or not.
+
+        When multiple values are available for this widget, the widget will by
+        default be disabled and a checkbox will appear unchecked. By checking the
+        checkbox, the user indicates they want to override the value with a specific
+        one that will apply to all items.
+        """
+
+        def __init__(self, qtwidgets, item, parent, field, value, editable, color, multi_value=False):
+            """
+            :param layout: Layout to add the widget into.
+            :param text: Text on the left of the editor widget.
+            :param editor: Widget used to edit the value.
+            """
+            # import the shotgun_fields module from the qtwidgets framework
+            shotgun_fields = qtwidgets.import_module("shotgun_fields")
+
+            self._field = field
+            self._value = value
+            self._item = item
+            self._layout = QtGui.QHBoxLayout()
+            self._multi_value = multi_value
+
+            field_name = item.name + " " + field if multi_value else field
+
+            self._field_label = shotgun_fields.text_widget.TextWidget(parent)  # QtGui.QLabel(field)
+            if color:
+                self._field_label.set_value("<b><font color='%s'>%s</font></b>" % (color, field_name))
+            else:
+                self._field_label.set_value("<b>%s</b>" % field_name)
+
+            self._editor = None
+            self._display = None
+
+            if isinstance(value, bool):
+                self._display = shotgun_fields.checkbox_widget.CheckBoxWidget(parent)
+                if editable:
+                    self._editor = self._display
+            elif isinstance(value, float):
+                self._display = shotgun_fields.float_widget.FloatWidget(parent)
+                if editable:
+                    self._editor = shotgun_fields.float_widget.FloatEditorWidget(parent)
+            elif isinstance(value, int) or isinstance(value, long):
+                self._display = shotgun_fields.number_widget.NumberWidget(parent)
+                if editable:
+                    self._editor = shotgun_fields.number_widget.NumberEditorWidget(parent)
+            elif isinstance(value, list):
+                self._display = shotgun_fields.list_widget.ListWidget(parent)
+                if editable:
+                    self._editor = shotgun_fields.list_widget.ListEditorWidget(parent)
+            elif isinstance(value, str):
+                self._display = shotgun_fields.text_widget.TextWidget(parent)
+                if editable:
+                    self._editor = shotgun_fields.text_widget.TextEditorWidget(parent)
+            else:
+                self._display = shotgun_fields.text_widget.TextWidget(parent)
+
+            if editable and self._editor:
+                self._widget = shotgun_fields.shotgun_field_editable.ShotgunFieldEditable(self._display, self._editor,
+                                                                                          parent)
+                self._widget.enable_editing(editable)
+            else:
+                self._widget = shotgun_fields.shotgun_field_editable.ShotgunFieldNotEditable(self._display, parent)
+
+            # set the default value before connecting the signal
+            self._widget.set_value(value)
+            self._widget.value_changed.connect(lambda: self._value_changed())
+
+            # self._field_label.setMinimumWidth(50)
+
+            self._layout.addWidget(self._field_label)
+            self._layout.addWidget(self._widget)
+            self._layout.addStretch()
+
+            parent.layout.addRow(self._layout)
+
+        def _value_changed(self):
+            # for item in self._items:
+            # TODO: implement handling multiple values, and settings values for multiple items.
+            # TODO: Maybe a widget that has different text in display widget (like a placeholder)
+            # TODO: and different in editor widget?!
+            self._item.properties.fields.update({self._field: self.widget.get_value()})
+
+        @property
+        def widget(self):
+            return self._widget
+
+        @property
+        def field(self):
+            return self._field
+
+        @property
+        def value(self):
+            return self._value
+
+        @property
+        def multi_value(self):
+            return self._multi_value
+
+    @staticmethod
+    def PropertiesWidgetInitialization(*args):
+        """
+        Dummy init.
+        """
+
+        raise NotImplementedError
+
+    class PropertiesWidget(WidgetBaseClass):
+        """
+        This is the plugin's custom UI.
+        """
+
+        def __init__(self, initialization_strategy, plugin, parent, items_and_tasks, qtwidgets, *args):
+            super(plugin.PropertiesWidget, self).__init__(initialization_strategy, plugin, parent,
+                                                          items_and_tasks, qtwidgets, *args)
+
+            self.qtwidgets = qtwidgets
+
+            self.layout = QtGui.QFormLayout(self)
+            self.setLayout(self.layout)
+
+            self._field_value_cache = dict()
+
+            for item, task in items_and_tasks.iteritems():
+                for key, value in item.properties.fields.iteritems():
+                    if key in task.settings["non_editable_fields"]:
+                        editable = False
+                        color = None
+                        multi_value = False
+                    else:
+                        editable = True
+                        multi_value = True
+                        color = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_HIGHLIGHT_COLOR"]
+
+                    plugin.PropertiesWidgetHandler(qtwidgets, item, self, key, value, editable, color,
+                                                          multi_value=multi_value)
+
+                for key in task.settings.cache["missing_keys"]:
+                    # make sure we are not adding this again
+                    if key not in item.properties.fields:
+                        plugin.PropertiesWidgetHandler(qtwidgets, item, self, key, "", editable=True,
+                                                              color=sgtk.platform.constants.SG_STYLESHEET_CONSTANTS[
+                                                                  "SG_ALERT_COLOR"],
+                                                              multi_value=True)
+
+    class TabbedWidgetController(QtGui.QTabWidget):
+        """
+        Controller that creates the tabbed widgets.
+        """
+
+        def __init__(self, plugin, parent, items_and_tasks):
+            QtGui.QTabWidget.__init__(self, parent)
+
+            self.setTabPosition(QtGui.QTabWidget.South)
+
+            qtwidgets = plugin.load_framework("tk-framework-qtwidgets_v2.x.x")
+
+            items = items_and_tasks.keys()
+            # since tasks will be of same type it's safe to assume they will all share the settings_to_display
+            tasks = items_and_tasks.values()
+
+            task_settings = tasks[0].settings if len(tasks) else {}
+
+            for tab_name, data in task_settings.get("Settings To Display", {}).iteritems():
+                if "type" not in data:
+                    plugin.logger.error("Type not defined in Settings To Display Tab Named %s." % tab_name)
+                    continue
+
+                if "initialization_strategy" not in data:
+                    plugin.logger.error("Initialization Strategy not "
+                                        "defined in Settings To Display Tab Named %s." % tab_name)
+                    continue
+
+                widget_type = data["type"].value
+                initialization_strategy = data["initialization_strategy"].value
+
+                if not hasattr(plugin, widget_type):
+                    plugin.logger.error("Can't create Widget of Type %s. Please contact your TD." % widget_type)
+                    continue
+
+                widget_class = getattr(plugin, widget_type)
+                widget_to_add = widget_class(initialization_strategy, plugin, parent, items_and_tasks, qtwidgets)
+
+                self.addTab(widget_to_add, tab_name)
 
     ############################################################################
     # Plugin properties
@@ -203,6 +430,17 @@ class PublishPlugin(PluginBase):
                     "A dict of plugin settings keyed by item type. Each entry in the dict "
                     "is itself a dict in which each item is the plugin attribute name and value."
                 ),
+            },
+            "Settings To Display": {
+                "type": "dict",
+                "default_value": {
+                    "Description": {
+                        "type": "DescriptionWidget",
+                        "initialization_strategy": None,
+                    },
+                },
+                "allows_empty": True,
+                "description": "Dictionary of tab name, and it's corresponding widget type to use."
             }
         }
 
@@ -493,40 +731,22 @@ class PublishPlugin(PluginBase):
     # allows clients to write their own publish plugins while deferring custom
     # UI settings implementations until needed.
 
-    def create_settings_widget(self, parent, item):
+    def create_settings_widget(self, parent, items_and_tasks):
         """
         Creates a Qt widget, for the supplied parent widget (a container widget
         on the right side of the publish UI).
 
         :param parent: The parent to use for the widget being created
-        :param item: Item for the settings widget is being created
+        :param items_and_tasks: Items to create the settings widget for and their corresponding tasks.
         :return: A QtGui.QWidget or subclass that displays information about
             the plugin and/or editable widgets for modifying the plugin's
             settings.
         """
-
-        # defer Qt-related imports
-        from sgtk.platform.qt import QtGui
-
-        # create a group box to display the description
-        description_group_box = QtGui.QGroupBox(parent)
-        description_group_box.setTitle("Description:")
-
-        # The publish plugin that subclasses this will implement the
-        # `description` property. We'll use that here to display the plugin's
-        # description in a label.
-        description_label = QtGui.QLabel(self.description)
-        description_label.setWordWrap(True)
-        description_label.setOpenExternalLinks(True)
-
-        # create the layout to use within the group box
-        description_layout = QtGui.QVBoxLayout()
-        description_layout.addWidget(description_label)
-        description_layout.addStretch()
-        description_group_box.setLayout(description_layout)
+        # Give the control to TabWidgetController to manage creation of settings to display.
+        tab_widget = self.TabbedWidgetController(self, parent, items_and_tasks)
 
         # return the description group box as the widget to display
-        return description_group_box
+        return tab_widget
 
     def get_ui_settings(self, widget):
         """

@@ -266,7 +266,7 @@ class PublishPluginInstance(PluginInstanceBase):
     ############################################################################
     # ui methods
 
-    def run_create_settings_widget(self, parent, item):
+    def run_create_settings_widget(self, parent, items_and_tasks):
         """
         Creates a custom widget to edit a plugin's settings.
 
@@ -274,7 +274,7 @@ class PublishPluginInstance(PluginInstanceBase):
 
         :param parent: Parent widget
         :type parent: :class:`QtGui.QWidget`
-        :param item: Item to create the settings widget for.
+        :param items_and_tasks: Items to create the settings widget for and their corresponding tasks.
         """
 
         # nothing to do if running without a UI
@@ -282,7 +282,7 @@ class PublishPluginInstance(PluginInstanceBase):
             return None
 
         with self._handle_plugin_error(None, "Error laying out widgets: %s"):
-            return self._hook_instance.create_settings_widget(parent, item)
+            return self._hook_instance.create_settings_widget(parent, items_and_tasks)
 
     def run_get_ui_settings(self, parent):
         """
