@@ -17,7 +17,6 @@ import traceback
 import sgtk
 from sgtk import TankError, TankMissingTemplateError, TankMissingTemplateKeysError
 from sgtk.platform import create_setting
-from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -184,15 +183,49 @@ class PublishPlugin(HookBaseClass):
                 )
             },
             "template_properties": {
-                "type": list,
+                "type": "list",
                 "values": {
                     "type": "str",
                 },
                 "allows_empty": True,
-                "default_value": ["publish_type", "publish_version", "publish_name", "publish_path",
-                                  "publish_symlink_path", "publish_linked_entity_name"],
-                "description": "List of fields on the item settings that represent a template."
-            }
+                "default_value": ["publish_name_template",
+                                  "publish_path_template",
+                                  "publish_symlink_template",
+                                  "publish_linked_entity_name_template"],
+                "description": "List of keys on the item settings that represent a template."
+            },
+            "submit_to_farm": {
+                "type": "bool",
+                "allows_empty": True,
+                "default_value": False,
+                "description": "Submit to farm!"
+            },
+            "non_editable_fields": {
+                "type": "list",
+                "allows_empty": True,
+                "default_value": ["width", "height", "DD", "MM", "YYYY", "SEQ", "eye", "extension"],
+                "description": "Non editable fields for the item."
+            },
+        }
+        schema["Settings To Display"] = {
+            "type": "dict",
+            "default_value": {
+                "Description": {
+                    "type": "DescriptionWidget",
+                    "initialization_strategy": None,
+                },
+                "Task Settings": {
+                    "type": "Settings",
+                    "keys": ["submit_to_farm"],
+                    "initialization_strategy": "SettingsInitialization",
+                },
+                "Fields": {
+                    "type": "PropertiesWidget",
+                    "initialization_strategy": "PropertiesWidgetInitialization"
+                },
+            },
+            "allows_empty": True,
+            "description": "Dictionary of tab name, and it's corresponding widget type to use."
         }
         return schema
 
@@ -200,6 +233,39 @@ class PublishPlugin(HookBaseClass):
     ############################################################################
     # standard publish plugin methods
 
+    @staticmethod
+    def PropertiesWidgetInitialization(plugin, parent, items_and_tasks, *args):
+        """
+        Initialization Strategy for this Widget
+        """
+        for item, task in items_and_tasks.iteritems():
+            task_settings = task.settings
+
+            attr_list = ("publish_type", "publish_version", "publish_name", "publish_path",
+                         "publish_symlink_path", "publish_linked_entity_name")
+
+            for attr in attr_list:
+                try:
+                    method = getattr(plugin, "_get_%s" % attr)
+                    item.properties[attr] = method(task_settings, item)
+                except Exception:
+                    plugin.logger.error(
+                        "Unable to determine '%s' for item: %s" % (attr, item.name),
+                        extra={
+                            "action_show_more_info": {
+                                "label": "Show Error Log",
+                                "tooltip": "Show the error log",
+                                "text": traceback.format_exc()
+                            }
+                        }
+                    )
+
+            template_properties = task_settings.get("template_properties")
+            task_settings.cache.setdefault("missing_keys", list())
+
+            for template_property in template_properties:
+                setting_cache = task_settings[template_property.value].cache
+                task_settings.cache["missing_keys"].extend(setting_cache.get("missing_keys", list()))
 
     def init_task_settings(self, item):
         """
@@ -238,7 +304,6 @@ class PublishPlugin(HookBaseClass):
                 settings_schema,
                 task_settings.bundle
             )
-
         # Else, warn the user...
         else:
             msg = "Key: %s\n%s" % (item.type, pprint.pformat(task_settings[setting_key]))
@@ -316,8 +381,8 @@ class PublishPlugin(HookBaseClass):
 
         # ---- validate the settings required to publish
 
-        attr_list = task_settings.get("template_properties").value
-
+        attr_list = ("publish_type", "publish_version", "publish_name", "publish_path",
+                     "publish_symlink_path", "publish_linked_entity_name")
         for attr in attr_list:
             try:
                 method = getattr(self, "_get_%s" % attr)
@@ -335,10 +400,25 @@ class PublishPlugin(HookBaseClass):
                 )
                 return False
 
-            if hasattr(item.properties, "%s_context_fields" % attr) and \
-                    hasattr(item.properties, "%s_missing_keys" % attr):
-                item.properties.context_fields.update(getattr(item.properties, "%s_context_fields" % attr))
-                item.properties.missing_keys.extend(getattr(item.properties, "%s_missing_keys" % attr))
+        template_properties = task_settings.get("template_properties")
+        task_settings.cache.setdefault("missing_keys", list())
+
+        for template_property in template_properties:
+            setting_cache = task_settings[template_property.value].cache
+            task_settings.cache["missing_keys"].extend(setting_cache.get("missing_keys", list()))
+
+        if task_settings.cache["missing_keys"]:
+            self.logger.error(
+                "Missing fields in the templates!",
+                extra={
+                    "action_show_more_info": {
+                        "label": "Show Fields",
+                        "tooltip": "Shows the missing fields across all templates.",
+                        "text": "Missing Fields: %s" % pprint.pformat(task_settings.cache["missing_keys"])
+                    }
+                }
+            )
+            return False
 
         # ---- check for conflicting publishes of this path with a status
 
@@ -780,14 +860,16 @@ class PublishPlugin(HookBaseClass):
 
         publisher = self.parent
 
+        publish_path_setting = task_settings.get("publish_path_template")
+        publish_path_template = publish_path_setting.value
+        publish_path = item.properties.get("path")
+
         # Start with the item's fields
-        fields = item.properties.get("fields", {})
+        publish_path_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
+        fields = publish_path_setting.cache["fields"]
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
-
-        publish_path_template = task_settings.get("publish_path_template").value
-        publish_path = item.properties.get("path")
 
         # If a template is defined, get the publish path from it
         if publish_path_template:
@@ -800,8 +882,6 @@ class PublishPlugin(HookBaseClass):
             # First get the fields from the context
             try:
                 context_fields = item.context.as_template_fields(pub_tmpl)
-                # store the fields resolved using the context for this template
-                item.properties.publish_path_context_fields = context_fields
                 fields.update(context_fields)
             except TankError, e:
                 self.logger.debug(
@@ -809,7 +889,7 @@ class PublishPlugin(HookBaseClass):
 
             missing_keys = pub_tmpl.missing_keys(fields, True)
             # store the missing keys for this template
-            item.properties.publish_path_missing_keys = missing_keys
+            publish_path_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_path_template (%s). Missing keys: %s" %
@@ -848,14 +928,16 @@ class PublishPlugin(HookBaseClass):
 
         publisher = self.parent
 
+        publish_symlink_setting = task_settings.get("publish_symlink_template")
+        publish_symlink_template = publish_symlink_setting.value
+        publish_symlink_path = None
+
         # Start with the item's fields
-        fields = item.properties.get("fields", {})
+        publish_symlink_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
+        fields = publish_symlink_setting.cache["fields"]
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
-
-        publish_symlink_template = task_settings.get("publish_symlink_template").value
-        publish_symlink_path = None
 
         # If a template is defined, get the publish symlink path from it
         if publish_symlink_template:
@@ -868,8 +950,6 @@ class PublishPlugin(HookBaseClass):
             # First get the fields from the context
             try:
                 context_fields = item.context.as_template_fields(pub_symlink_tmpl)
-                # store the fields resolved using the context for this template
-                item.properties.publish_symlink_context_fields = context_fields
                 fields.update(context_fields)
             except TankError, e:
                 self.logger.debug(
@@ -877,7 +957,7 @@ class PublishPlugin(HookBaseClass):
 
             missing_keys = pub_symlink_tmpl.missing_keys(fields, True)
             # store the missing keys for this template
-            item.properties.publish_symlink_missing_keys = missing_keys
+            publish_symlink_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_symlink_template (%s). Missing keys: %s" %
@@ -928,17 +1008,19 @@ class PublishPlugin(HookBaseClass):
 
         publisher = self.parent
 
+        publish_name_setting = task_settings.get("publish_name_template")
+        publish_name_template = publish_name_setting.value
+        publish_name = None
+
         # Get the input path for this item
         path = item.properties.get("path")
 
         # Start with the item's fields
-        fields = item.properties.get("fields", {})
+        publish_name_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
+        fields = publish_name_setting.cache["fields"]
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
-
-        publish_name_template = task_settings.get("publish_name_template").value
-        publish_name = None
 
         # First check if we have a publish_name_template defined and attempt to
         # get the publish name from that
@@ -952,8 +1034,6 @@ class PublishPlugin(HookBaseClass):
             # First get the fields from the context
             try:
                 context_fields = item.context.as_template_fields(pub_tmpl)
-                # store the fields resolved using the context for this template
-                item.properties.publish_name_context_fields = context_fields
                 fields.update(context_fields)
             except TankError, e:
                 self.logger.debug(
@@ -961,7 +1041,7 @@ class PublishPlugin(HookBaseClass):
 
             missing_keys = pub_tmpl.missing_keys(fields, True)
             # store the missing keys for this template
-            item.properties.publish_name_missing_keys = missing_keys
+            publish_name_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_name_template (%s). Missing keys: %s" %
@@ -992,14 +1072,16 @@ class PublishPlugin(HookBaseClass):
 
         publisher = self.parent
 
+        publish_linked_entity_name_setting = task_settings.get("publish_linked_entity_name_template")
+        publish_linked_entity_name_template = publish_linked_entity_name_setting.value
+        publish_linked_entity_name = None
+
         # Start with the item's fields
-        fields = item.properties.get("fields", {})
+        publish_linked_entity_name_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
+        fields = publish_linked_entity_name_setting.cache["fields"]
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
-
-        publish_linked_entity_name_template = task_settings.get("publish_linked_entity_name_template").value
-        publish_linked_entity_name = None
 
         # check if we have a publish_linked_entity_name_template defined
         if publish_linked_entity_name_template:
@@ -1012,8 +1094,6 @@ class PublishPlugin(HookBaseClass):
             # First get the fields from the context
             try:
                 context_fields = item.context.as_template_fields(pub_linked_entity_name_tmpl)
-                # store the fields resolved using the context for this template
-                item.properties.publish_linked_entity_name_context_fields = context_fields
                 fields.update(context_fields)
             except TankError, e:
                 self.logger.debug(
@@ -1021,7 +1101,7 @@ class PublishPlugin(HookBaseClass):
 
             missing_keys = pub_linked_entity_name_tmpl.missing_keys(fields, True)
             # store the missing keys for this template
-            item.properties.publish_linked_entity_name_missing_keys = missing_keys
+            publish_linked_entity_name_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_linked_entity_name_template (%s). Missing keys: %s" %
