@@ -200,11 +200,11 @@ class PublishPlugin(HookBaseClass):
                 "default_value": False,
                 "description": "Submit to farm!"
             },
-            "non_editable_fields": {
+            "unsupported_setting": {
                 "type": "list",
                 "allows_empty": True,
-                "default_value": ["width", "height", "DD", "MM", "YYYY", "SEQ", "eye", "extension"],
-                "description": "Non editable fields for the item."
+                "default_value": ["bla1", "bla2"],
+                "description": "List Setting!"
             },
         }
         schema["Settings To Display"] = {
@@ -215,13 +215,14 @@ class PublishPlugin(HookBaseClass):
                     "initialization_strategy": None,
                 },
                 "Task Settings": {
-                    "type": "Settings",
-                    "keys": ["submit_to_farm"],
-                    "initialization_strategy": "SettingsInitialization",
+                    "type": "SettingsWidget",
+                    "exposed_settings": ["submit_to_farm", "unsupported_setting"],
+                    "initialization_strategy": None,
                 },
                 "Fields": {
                     "type": "PropertiesWidget",
-                    "initialization_strategy": "PropertiesWidgetInitialization"
+                    "initialization_strategy": "PropertiesWidgetInitialization",
+                    "non_editable_fields": ["width", "height", "DD", "MM", "YYYY", "SEQ", "eye", "extension"],
                 },
             },
             "allows_empty": True,
@@ -261,11 +262,25 @@ class PublishPlugin(HookBaseClass):
                     )
 
             template_properties = task_settings.get("template_properties")
-            task_settings.cache.setdefault("missing_keys", list())
+            missing_keys = list()
 
             for template_property in template_properties:
                 setting_cache = task_settings[template_property.value].cache
-                task_settings.cache["missing_keys"].extend(setting_cache.get("missing_keys", list()))
+                missing_keys.extend(setting_cache.get("missing_keys", list()))
+
+            task_settings.cache["missing_keys"] = list(set(missing_keys))
+
+            if task_settings.cache["missing_keys"]:
+                plugin.logger.error(
+                    "Missing fields in the templates!",
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Fields",
+                            "tooltip": "Shows the missing fields across all templates.",
+                            "text": "Missing Fields: %s" % pprint.pformat(task_settings.cache["missing_keys"])
+                        }
+                    }
+                )
 
     def init_task_settings(self, item):
         """
@@ -401,11 +416,13 @@ class PublishPlugin(HookBaseClass):
                 return False
 
         template_properties = task_settings.get("template_properties")
-        task_settings.cache.setdefault("missing_keys", list())
+        missing_keys = list()
 
         for template_property in template_properties:
             setting_cache = task_settings[template_property.value].cache
-            task_settings.cache["missing_keys"].extend(setting_cache.get("missing_keys", list()))
+            missing_keys.extend(setting_cache.get("missing_keys", list()))
+
+        task_settings.cache["missing_keys"] = list(set(missing_keys))
 
         if task_settings.cache["missing_keys"]:
             self.logger.error(

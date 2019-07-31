@@ -30,9 +30,10 @@ class PublishPlugin(PluginBase):
         Base Class for creating any custom settings widgets.
         """
 
-        def __init__(self, initialization_strategy, plugin, parent, *args):
+        def __init__(self, creation_data, plugin, parent, *args):
             QtGui.QWidget.__init__(self, parent)
 
+            initialization_strategy = creation_data["initialization_strategy"].value
             if initialization_strategy:
                 if hasattr(plugin, initialization_strategy):
                     # call the strategy
@@ -44,8 +45,8 @@ class PublishPlugin(PluginBase):
         """
         Widget to display description.
         """
-        def __init__(self, initialization_strategy, plugin, parent, *args):
-            super(plugin.DescriptionWidget, self).__init__(initialization_strategy, plugin, parent, *args)
+        def __init__(self, creation_data, plugin, parent, *args):
+            super(plugin.DescriptionWidget, self).__init__(creation_data, plugin, parent, *args)
 
             # The publish plugin that subclasses this will implement the
             # `description` property. We'll use that here to display the plugin's
@@ -71,7 +72,26 @@ class PublishPlugin(PluginBase):
         one that will apply to all items.
         """
 
-        def __init__(self, qtwidgets, item, parent, field, value, editable, color, multi_value=False):
+        def populate_data(self, qtwidgets, items, parent, field, editable, mode):
+
+            self._editable = editable
+            # we display only the value of the first item
+            fields = items[0].properties.fields
+            self._value = fields[field] if field in fields else "(None)"
+
+            if len(items) > 1:
+                # method that shows formmatted item names
+                # field_name = field + "".join(["<br>&nbsp;&nbsp;&nbsp;&nbsp;- " + item.name for item in items])
+                self._field_name = field + " (Multiple Values Exist)"
+            else:
+                self._field_name = field
+
+        def value_changed(self):
+            # TODO: Implement value validation before update.
+            for item in self._items:
+                item.properties.fields.update({self._field: self.widget.get_value()})
+
+        def __init__(self, plugin, qtwidgets, items, parent, field, editable, mode="display"):
             """
             :param layout: Layout to add the widget into.
             :param text: Text on the left of the editor widget.
@@ -79,57 +99,78 @@ class PublishPlugin(PluginBase):
             """
             # import the shotgun_fields module from the qtwidgets framework
             shotgun_fields = qtwidgets.import_module("shotgun_fields")
-
-            self._field = field
-            self._value = value
-            self._item = item
             self._layout = QtGui.QHBoxLayout()
-            self._multi_value = multi_value
 
-            field_name = item.name + " " + field if multi_value else field
+            # initialize base data
+            self._field = field
+            self._field_name = field
+            self._items = items
+            self._value = "(Un-intialized)"
+            # make it non-editable if the populate data doesn't modify it.
+            self._editable = False
+
+            self._color_mapping = {
+                "display": None,
+                "edit": sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_HIGHLIGHT_COLOR"],
+                "error": sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_ALERT_COLOR"],
+            }
+
+            self.populate_data(qtwidgets, items, parent, field, editable, mode)
 
             self._field_label = shotgun_fields.text_widget.TextWidget(parent)  # QtGui.QLabel(field)
-            if color:
-                self._field_label.set_value("<b><font color='%s'>%s</font></b>" % (color, field_name))
-            else:
-                self._field_label.set_value("<b>%s</b>" % field_name)
 
             self._editor = None
             self._display = None
 
-            if isinstance(value, bool):
+            if isinstance(self._value, bool):
                 self._display = shotgun_fields.checkbox_widget.CheckBoxWidget(parent)
-                if editable:
-                    self._editor = self._display
-            elif isinstance(value, float):
+                if self._editable:
+                    self._editor = shotgun_fields.checkbox_widget.CheckBoxWidget(parent)
+            elif isinstance(self._value, float):
                 self._display = shotgun_fields.float_widget.FloatWidget(parent)
-                if editable:
+                if self._editable:
                     self._editor = shotgun_fields.float_widget.FloatEditorWidget(parent)
-            elif isinstance(value, int) or isinstance(value, long):
+            elif isinstance(self._value, int) or isinstance(self._value, long):
                 self._display = shotgun_fields.number_widget.NumberWidget(parent)
-                if editable:
+                if self._editable:
                     self._editor = shotgun_fields.number_widget.NumberEditorWidget(parent)
-            elif isinstance(value, list):
-                self._display = shotgun_fields.list_widget.ListWidget(parent)
-                if editable:
-                    self._editor = shotgun_fields.list_widget.ListEditorWidget(parent)
-            elif isinstance(value, str):
+            # TODO: Implement a custom Combobox widget.
+            # elif isinstance(self._value, list):
+            #     self._display = shotgun_fields.list_widget.ListWidget(parent)
+            #     if self._editable:
+            #         self._editor = shotgun_fields.list_widget.ListEditorWidget(parent)
+            elif isinstance(self._value, str):
                 self._display = shotgun_fields.text_widget.TextWidget(parent)
-                if editable:
+                if self._editable:
                     self._editor = shotgun_fields.text_widget.TextEditorWidget(parent)
             else:
                 self._display = shotgun_fields.text_widget.TextWidget(parent)
 
-            if editable and self._editor:
+            if self._editable and self._editor:
                 self._widget = shotgun_fields.shotgun_field_editable.ShotgunFieldEditable(self._display, self._editor,
                                                                                           parent)
-                self._widget.enable_editing(editable)
+                self._widget.enable_editing(self._editable)
+                color = self._color_mapping.get(mode, None)
             else:
                 self._widget = shotgun_fields.shotgun_field_editable.ShotgunFieldNotEditable(self._display, parent)
+                # force the color to be display
+                color = None
+
+            if color:
+                self._field_label.set_value("<b><font color='%s'>%s</font></b>" % (color, self._field_name))
+            else:
+                self._field_label.set_value("<b>%s</b>" % self._field_name)
+
+            if len(items) > 1:
+                # update tooltip on field to warn user about the force override if the value is changed.
+                self._field_label.setToolTip("<p>%s</p>"
+                                             "<p><b><font color='%s'>*Force overrides the same value "
+                                             "on all selected items*</font></b></p>" % (self._field_label.get_value(),
+                                                                                        self._color_mapping["error"]))
 
             # set the default value before connecting the signal
-            self._widget.set_value(value)
-            self._widget.value_changed.connect(lambda: self._value_changed())
+            self._widget.set_value(self._value)
+            self._widget.value_changed.connect(lambda: self.value_changed())
 
             # self._field_label.setMinimumWidth(50)
 
@@ -138,13 +179,6 @@ class PublishPlugin(PluginBase):
             self._layout.addStretch()
 
             parent.layout.addRow(self._layout)
-
-        def _value_changed(self):
-            # for item in self._items:
-            # TODO: implement handling multiple values, and settings values for multiple items.
-            # TODO: Maybe a widget that has different text in display widget (like a placeholder)
-            # TODO: and different in editor widget?!
-            self._item.properties.fields.update({self._field: self.widget.get_value()})
 
         @property
         def widget(self):
@@ -158,14 +192,10 @@ class PublishPlugin(PluginBase):
         def value(self):
             return self._value
 
-        @property
-        def multi_value(self):
-            return self._multi_value
-
     @staticmethod
     def PropertiesWidgetInitialization(*args):
         """
-        Dummy init.
+        Dummy init for property widget, to be implemented by sub-class.
         """
 
         raise NotImplementedError
@@ -175,8 +205,22 @@ class PublishPlugin(PluginBase):
         This is the plugin's custom UI.
         """
 
-        def __init__(self, initialization_strategy, plugin, parent, items_and_tasks, qtwidgets, *args):
-            super(plugin.PropertiesWidget, self).__init__(initialization_strategy, plugin, parent,
+        def fill_cache(self, item, task, key, value):
+            # set the first value for the key
+            self._field_values_cache.setdefault(key, list())
+            if value not in self._field_values_cache[key]:
+                self._field_values_cache[key].append(value)
+                self._field_items_cache.setdefault(key, list())
+                self._field_items_cache[key].append(item)
+
+        def fill_cache_missing_keys(self, item, task):
+            # set the first value for the key
+            for key in task.settings.cache["missing_keys"]:
+                self._missing_items_cache.setdefault(key, list())
+                self._missing_items_cache[key].append(item)
+
+        def __init__(self, creation_data, plugin, parent, items_and_tasks, qtwidgets, *args):
+            super(plugin.PropertiesWidget, self).__init__(creation_data, plugin, parent,
                                                           items_and_tasks, qtwidgets, *args)
 
             self.qtwidgets = qtwidgets
@@ -184,29 +228,98 @@ class PublishPlugin(PluginBase):
             self.layout = QtGui.QFormLayout(self)
             self.setLayout(self.layout)
 
-            self._field_value_cache = dict()
+            # since we only allow selection of tasks that have same context and same type, field keys should be same
+            self._field_items_cache = dict()
+            self._missing_items_cache = dict()
+            self._field_values_cache = dict()
+            self._field_widget_cache = dict()
 
-            for item, task in items_and_tasks.iteritems():
-                for key, value in item.properties.fields.iteritems():
-                    if key in task.settings["non_editable_fields"]:
-                        editable = False
-                        color = None
-                        multi_value = False
-                    else:
-                        editable = True
-                        multi_value = True
-                        color = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_HIGHLIGHT_COLOR"]
+            # get non_editable_fields from Settings To Display
+            non_editable_fields = creation_data["non_editable_fields"]
 
-                    plugin.PropertiesWidgetHandler(qtwidgets, item, self, key, value, editable, color,
-                                                          multi_value=multi_value)
+            # get the cache ready to check for duplicate values across items
+            [self.fill_cache(item, task, key, value) for item, task in items_and_tasks.iteritems()
+             for key, value in item.properties.fields.iteritems()]
 
-                for key in task.settings.cache["missing_keys"]:
-                    # make sure we are not adding this again
-                    if key not in item.properties.fields:
-                        plugin.PropertiesWidgetHandler(qtwidgets, item, self, key, "", editable=True,
-                                                              color=sgtk.platform.constants.SG_STYLESHEET_CONSTANTS[
-                                                                  "SG_ALERT_COLOR"],
-                                                              multi_value=True)
+            for key, items in self._field_items_cache.iteritems():
+                if key in non_editable_fields:
+                    editable = False
+                    mode = "display"
+                else:
+                    editable = True
+                    mode = "edit"
+
+                self._field_widget_cache.setdefault(key, list())
+
+                self._field_widget_cache[key].append(plugin.PropertiesWidgetHandler(plugin, qtwidgets, items, self,
+                                                                                    key, editable, mode=mode)
+                                                     )
+
+            # create the cache for missing keys
+            [self.fill_cache_missing_keys(item, task) for item, task in items_and_tasks.iteritems()]
+
+            for key, items in self._missing_items_cache.iteritems():
+                self._field_widget_cache.setdefault(key, list())
+                self._field_widget_cache[key].append(plugin.PropertiesWidgetHandler(plugin, qtwidgets, items, self,
+                                                                                    key, editable=True,
+                                                                                    mode="error")
+                                                     )
+
+    class SettingsWidgetHandler(PropertiesWidgetHandler):
+        def populate_data(self, qtwidgets, tasks, parent, field, editable, color):
+
+            self._editable = editable
+            # we display only the value of the first item
+            settings = tasks[0].settings
+            self._value = settings[field].value if field in settings else "(None)"
+
+            if len(tasks) > 1:
+                # method that shows formmatted item names
+                # field_name = field + "".join(["<br>&nbsp;&nbsp;&nbsp;&nbsp;- " + item.name for item in items])
+                self._field_name = field + " (Multiple Values Exist)"
+            else:
+                self._field_name = field
+
+        def value_changed(self):
+            # TODO: Implement value validation before update.
+            for task in self._items:
+                task.settings[self._field].value = self.widget.get_value()
+
+    class SettingsWidget(WidgetBaseClass):
+        """
+        This is the plugin's custom UI.
+        """
+
+        def fill_cache(self, tasks, key):
+            # set the first value for the key
+            self._field_values_cache.setdefault(key, list())
+            for task in tasks:
+                if key in task.settings and task.settings[key].value not in self._field_values_cache[key]:
+                    self._field_values_cache[key].append(task.settings[key].value)
+                    self._field_tasks_cache.setdefault(key, list())
+                    self._field_tasks_cache[key].append(task)
+
+        def __init__(self, creation_data, plugin, parent, items_and_tasks, qtwidgets, *args):
+            super(plugin.SettingsWidget, self).__init__(creation_data, plugin, parent,
+                                                        items_and_tasks, qtwidgets, *args)
+
+            self.qtwidgets = qtwidgets
+
+            self.layout = QtGui.QFormLayout(self)
+            self.setLayout(self.layout)
+
+            editable_settings = creation_data["exposed_settings"].value
+
+            # since we only allow selection of tasks that have same context and same type, field keys should be same
+            self._field_tasks_cache = dict()
+            self._field_values_cache = dict()
+
+            [self.fill_cache(items_and_tasks.values(), key) for key in editable_settings]
+
+            for key, tasks in self._field_tasks_cache.iteritems():
+                plugin.SettingsWidgetHandler(plugin, qtwidgets, tasks, self,
+                                             key, editable=True, mode="edit"
+                                             )
 
     class TabbedWidgetController(QtGui.QTabWidget):
         """
@@ -221,30 +334,29 @@ class PublishPlugin(PluginBase):
             qtwidgets = plugin.load_framework("tk-framework-qtwidgets_v2.x.x")
 
             items = items_and_tasks.keys()
-            # since tasks will be of same type it's safe to assume they will all share the settings_to_display
+            # since tasks will be of same type it's safe to assume they will all share the same "Settings To Display"
             tasks = items_and_tasks.values()
 
             task_settings = tasks[0].settings if len(tasks) else {}
 
-            for tab_name, data in task_settings.get("Settings To Display", {}).iteritems():
-                if "type" not in data:
+            for tab_name, creation_data in task_settings.get("Settings To Display", {}).iteritems():
+                if "type" not in creation_data:
                     plugin.logger.error("Type not defined in Settings To Display Tab Named %s." % tab_name)
                     continue
 
-                if "initialization_strategy" not in data:
+                if "initialization_strategy" not in creation_data:
                     plugin.logger.error("Initialization Strategy not "
                                         "defined in Settings To Display Tab Named %s." % tab_name)
                     continue
 
-                widget_type = data["type"].value
-                initialization_strategy = data["initialization_strategy"].value
+                widget_type = creation_data["type"].value
 
                 if not hasattr(plugin, widget_type):
                     plugin.logger.error("Can't create Widget of Type %s. Please contact your TD." % widget_type)
                     continue
 
                 widget_class = getattr(plugin, widget_type)
-                widget_to_add = widget_class(initialization_strategy, plugin, parent, items_and_tasks, qtwidgets)
+                widget_to_add = widget_class(creation_data, plugin, parent, items_and_tasks, qtwidgets)
 
                 self.addTab(widget_to_add, tab_name)
 
