@@ -234,20 +234,20 @@ class PublishPlugin(PluginBase):
             self._field_values_cache = dict()
             self._field_widget_cache = dict()
 
-            # get non_editable_fields from Settings To Display
-            non_editable_fields = creation_data["non_editable_fields"]
+            # get editable_fields from Settings To Display
+            editable_fields = creation_data["editable_fields"]
 
             # get the cache ready to check for duplicate values across items
             [self.fill_cache(item, task, key, value) for item, task in items_and_tasks.iteritems()
              for key, value in item.properties.fields.iteritems()]
 
             for key, items in self._field_items_cache.iteritems():
-                if key in non_editable_fields:
-                    editable = False
-                    mode = "display"
-                else:
+                if key in editable_fields:
                     editable = True
                     mode = "edit"
+                else:
+                    editable = False
+                    mode = "display"
 
                 self._field_widget_cache.setdefault(key, list())
 

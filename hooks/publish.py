@@ -222,7 +222,7 @@ class PublishPlugin(HookBaseClass):
                 "Fields": {
                     "type": "PropertiesWidget",
                     "initialization_strategy": "PropertiesWidgetInitialization",
-                    "non_editable_fields": ["width", "height", "DD", "MM", "YYYY", "SEQ", "eye", "extension"],
+                    "editable_fields": ["name", "snapshot_type", "version"],
                 },
             },
             "allows_empty": True,
