@@ -132,10 +132,7 @@ class PublishPluginInstance(PluginInstanceBase):
         :returns: ``True`` if the plugin supports ``create_settings_widget``,
             ``get_ui_settings`` and ``set_ui_settings``,``False`` otherwise.
         """
-        return all(
-            hasattr(self._hook_instance, attr)
-            for attr in ["create_settings_widget", "get_ui_settings", "set_ui_settings"]
-        )
+        return True if self._settings.get("Settings To Display", {}) else False
 
     def get_plugin_settings(self, context=None):
         """

@@ -181,106 +181,75 @@ class PublishPlugin(HookBaseClass):
                     "Dictionary of template_key/sg_field pairs to populate on "
                     "the PublishedFile entity."
                 )
-            },
-            "template_properties": {
-                "type": "list",
-                "values": {
-                    "type": "str",
-                },
-                "allows_empty": True,
-                "default_value": ["publish_name_template",
-                                  "publish_path_template",
-                                  "publish_symlink_template",
-                                  "publish_linked_entity_name_template"],
-                "description": "List of keys on the item settings that represent a template."
-            },
-            "submit_to_farm": {
-                "type": "bool",
-                "allows_empty": True,
-                "default_value": False,
-                "description": "Submit to farm!"
-            },
-            "unsupported_setting": {
-                "type": "list",
-                "allows_empty": True,
-                "default_value": ["bla1", "bla2"],
-                "description": "List Setting!"
-            },
+            }
         }
-        schema["Settings To Display"] = {
-            "type": "dict",
-            "default_value": {
-                "Description": {
-                    "type": "DescriptionWidget",
-                    "initialization_strategy": None,
-                },
-                "Task Settings": {
-                    "type": "SettingsWidget",
-                    "exposed_settings": ["submit_to_farm", "unsupported_setting"],
-                    "initialization_strategy": None,
-                },
-                "Fields": {
-                    "type": "PropertiesWidget",
-                    "initialization_strategy": "PropertiesWidgetInitialization",
-                    "editable_fields": ["name", "snapshot_type", "version"],
-                },
-            },
+        schema["Test Bool Setting"] = {
+            "type": "bool",
             "allows_empty": True,
-            "description": "Dictionary of tab name, and it's corresponding widget type to use."
+            "default_value": False,
+            "description": "Test boolean setting"
+        }
+        schema["Test Int Setting"] = {
+            "type": "int",
+            "allows_empty": True,
+            "default_value": 1,
+            "description": "Test integer setting"
+        }
+        schema["Test String Setting"] = {
+            "type": "str",
+            "allows_empty": True,
+            "default_value": "Foobar",
+            "description": "Test string setting"
+        }
+        schema["Test List Setting"] = {
+            "type": "list",
+            "allows_empty": True,
+            "default_value": ["bla1", "bla2"],
+            "description": "Test list setting"
+        }
+        schema["Settings To Display"]["values"]["items"] = {
+            "publish_name_template": {
+                "type": "TemplateSettingWidget",
+                "display_name": "Publish Name",
+                "editable": False
+            },
+            "publish_path_template": {
+                "type": "TemplateSettingWidget",
+                "display_name": "Publish Path",
+                "editable": False
+            },
+            "publish_symlink_template": {
+                "type": "TemplateSettingWidget",
+                "display_name": "Publish Symlink",
+                "editable": False
+            },
+            "publish_linked_entity_name_template": {
+                "type": "TemplateSettingWidget",
+                "display_name": "Publish Linked Entity Name",
+                "editable": False
+            },
+            "Test Bool Setting": {
+                "type": "SettingWidget",
+                "editable": True
+            },
+            "Test Int Setting": {
+                "type": "SettingWidget",
+                "editable": True
+            },
+            "Test String Setting": {
+                "type": "SettingWidget",
+                "editable": True
+            },
+            "Test List Setting": {
+                "type": "SettingWidget",
+                "editable": True
+            },
         }
         return schema
 
 
     ############################################################################
     # standard publish plugin methods
-
-    @staticmethod
-    def PropertiesWidgetInitialization(plugin, parent, items_and_tasks, *args):
-        """
-        Initialization Strategy for this Widget
-        """
-        for item, task in items_and_tasks.iteritems():
-            task_settings = task.settings
-
-            attr_list = ("publish_type", "publish_version", "publish_name", "publish_path",
-                         "publish_symlink_path", "publish_linked_entity_name")
-
-            for attr in attr_list:
-                try:
-                    method = getattr(plugin, "_get_%s" % attr)
-                    item.properties[attr] = method(task_settings, item)
-                except Exception:
-                    plugin.logger.error(
-                        "Unable to determine '%s' for item: %s" % (attr, item.name),
-                        extra={
-                            "action_show_more_info": {
-                                "label": "Show Error Log",
-                                "tooltip": "Show the error log",
-                                "text": traceback.format_exc()
-                            }
-                        }
-                    )
-
-            template_properties = task_settings.get("template_properties")
-            missing_keys = list()
-
-            for template_property in template_properties:
-                setting_cache = task_settings[template_property.value].cache
-                missing_keys.extend(setting_cache.get("missing_keys", list()))
-
-            task_settings.cache["missing_keys"] = list(set(missing_keys))
-
-            if task_settings.cache["missing_keys"]:
-                plugin.logger.error(
-                    "Missing fields in the templates!",
-                    extra={
-                        "action_show_more_info": {
-                            "label": "Show Fields",
-                            "tooltip": "Shows the missing fields across all templates.",
-                            "text": "Missing Fields: %s" % pprint.pformat(task_settings.cache["missing_keys"])
-                        }
-                    }
-                )
 
     def init_task_settings(self, item):
         """
@@ -332,6 +301,26 @@ class PublishPlugin(HookBaseClass):
                     }
                 }
             )
+
+        # Initialize any template settings with the fields stored on the item
+        # during collection
+        for setting in task_settings.itervalues():
+            if setting.type == "template" and "fields" in item.properties:
+                setting.extra["fields"] = {}
+
+                tmpl = publisher.get_template_by_name(setting.value)
+                if not tmpl:
+                    # this template was not found in the template config!
+                    raise TankMissingTemplateError("The Template '%s' does not exist!" % setting.value)
+
+                # Get the list of fields specific to this template
+                tmpl_keys = tmpl.keys().keys()
+
+                for k, v in item.properties["fields"].iteritems():
+                    if k not in tmpl_keys:
+                        continue
+                    setting.extra["fields"][k] = \
+                        self.TemplateSettingWidget.TemplateField(k, v, editable=True, is_missing=False)
 
         return task_settings
 
@@ -415,28 +404,6 @@ class PublishPlugin(HookBaseClass):
                 )
                 return False
 
-        template_properties = task_settings.get("template_properties")
-        missing_keys = list()
-
-        for template_property in template_properties:
-            setting_cache = task_settings[template_property.value].cache
-            missing_keys.extend(setting_cache.get("missing_keys", list()))
-
-        task_settings.cache["missing_keys"] = list(set(missing_keys))
-
-        if task_settings.cache["missing_keys"]:
-            self.logger.error(
-                "Missing fields in the templates!",
-                extra={
-                    "action_show_more_info": {
-                        "label": "Show Fields",
-                        "tooltip": "Shows the missing fields across all templates.",
-                        "text": "Missing Fields: %s" % pprint.pformat(task_settings.cache["missing_keys"])
-                    }
-                }
-            )
-            return False
-
         # ---- check for conflicting publishes of this path with a status
 
         # Note the name, context, and path *must* match the values supplied to
@@ -497,7 +464,7 @@ class PublishPlugin(HookBaseClass):
             if conflict_info:
                 self.logger.error(
                     "Found conflicting publishes for 'v%s' on disk." %
-                        (item.properties.publish_version,),
+                    (item.properties.publish_version,),
                     extra={
                         "action_show_more_info": {
                             "label": "Show Conflicts",
@@ -510,7 +477,7 @@ class PublishPlugin(HookBaseClass):
 
         self.logger.info(
             "A Publish will be created for item '%s'." %
-                (item.name,),
+            (item.name,),
             extra={
                 "action_show_more_info": {
                     "label": "Show Info",
@@ -659,7 +626,7 @@ class PublishPlugin(HookBaseClass):
             # add the publish data to item properties
             item.properties.sg_publish_data_list.append(sg_publish_data)
 
-        if exception:
+        if exception is not None:
             raise exception
 
 
@@ -692,14 +659,14 @@ class PublishPlugin(HookBaseClass):
                 try:
                     self.sgtk.shotgun.delete(publish_data["type"], publish_data["id"])
                     self.logger.info("Cleaning up published file...",
-                                     extra={
-                                         "action_show_more_info": {
-                                             "label": "Publish Data",
-                                             "tooltip": "Show the publish data.",
-                                             "text": "%s" % publish_data
-                                         }
-                                     }
-                                     )
+                        extra={
+                            "action_show_more_info": {
+                                "label": "Publish Data",
+                                "tooltip": "Show the publish data.",
+                                "text": "%s" % publish_data
+                            }
+                        }
+                    )
                 except Exception:
                     self.logger.error(
                         "Failed to delete PublishedFile Entity for %s" % item.name,
@@ -832,15 +799,15 @@ class PublishPlugin(HookBaseClass):
         publish_entity_type = sgtk.util.get_published_file_entity_type(self.parent.sgtk)
         try:
             fields = self.parent.shotgun.schema_field_read(publish_entity_type)
-        except Exception, e:
+        except Exception as e:
             self.logger.error("Failed to find fields for the '%s' schema: %s"
                               % (publish_entity_type, e))
 
         bad_fields = list(set(sg_fields.keys()).difference(set(fields)))
         if bad_fields:
             self.logger.warning(
-                    "The '%s' schema does not support these fields: %s. Skipping." % \
-                    (publish_entity_type, pprint.pformat(bad_fields))
+                "The '%s' schema does not support these fields: %s. Skipping." % \
+                (publish_entity_type, pprint.pformat(bad_fields))
             )
 
         # Return the subset of valid fields
@@ -882,8 +849,7 @@ class PublishPlugin(HookBaseClass):
         publish_path = item.properties.get("path")
 
         # Start with the item's fields
-        publish_path_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
-        fields = publish_path_setting.cache["fields"]
+        fields = copy.copy(publish_path_setting.extra.get("fields", {}))
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
@@ -898,19 +864,16 @@ class PublishPlugin(HookBaseClass):
 
             # First get the fields from the context
             try:
-                context_fields = item.context.as_template_fields(pub_tmpl)
-                fields.update(context_fields)
-            except TankError, e:
+                fields.update(item.context.as_template_fields(pub_tmpl))
+            except TankError:
                 self.logger.debug(
                     "Unable to get context fields for publish_path_template.")
 
             missing_keys = pub_tmpl.missing_keys(fields, True)
-            # store the missing keys for this template
-            publish_path_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_path_template (%s). Missing keys: %s" %
-                            (publish_path_template, pprint.pformat(missing_keys))
+                        (publish_path_template, pprint.pformat(missing_keys))
                 )
 
             # Apply fields to publish_path_template to get publish path
@@ -950,8 +913,7 @@ class PublishPlugin(HookBaseClass):
         publish_symlink_path = None
 
         # Start with the item's fields
-        publish_symlink_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
-        fields = publish_symlink_setting.cache["fields"]
+        fields = copy.copy(publish_symlink_setting.extra.get("fields", {}))
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
@@ -966,19 +928,16 @@ class PublishPlugin(HookBaseClass):
 
             # First get the fields from the context
             try:
-                context_fields = item.context.as_template_fields(pub_symlink_tmpl)
-                fields.update(context_fields)
-            except TankError, e:
+                fields.update(item.context.as_template_fields(pub_symlink_tmpl))
+            except TankError:
                 self.logger.debug(
                     "Unable to get context fields for publish_symlink_template.")
 
             missing_keys = pub_symlink_tmpl.missing_keys(fields, True)
-            # store the missing keys for this template
-            publish_symlink_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_symlink_template (%s). Missing keys: %s" %
-                            (publish_symlink_template, pprint.pformat(missing_keys))
+                        (publish_symlink_template, pprint.pformat(missing_keys))
                 )
 
             # Apply fields to publish_symlink_template to get publish symlink path
@@ -1033,8 +992,7 @@ class PublishPlugin(HookBaseClass):
         path = item.properties.get("path")
 
         # Start with the item's fields
-        publish_name_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
-        fields = publish_name_setting.cache["fields"]
+        fields = copy.copy(publish_name_setting.extra.get("fields", {}))
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
@@ -1050,19 +1008,16 @@ class PublishPlugin(HookBaseClass):
 
             # First get the fields from the context
             try:
-                context_fields = item.context.as_template_fields(pub_tmpl)
-                fields.update(context_fields)
-            except TankError, e:
+                fields.update(item.context.as_template_fields(pub_tmpl))
+            except TankError:
                 self.logger.debug(
                     "Unable to get context fields for publish_name_template.")
 
             missing_keys = pub_tmpl.missing_keys(fields, True)
-            # store the missing keys for this template
-            publish_name_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_name_template (%s). Missing keys: %s" %
-                            (publish_name_template, pprint.pformat(missing_keys))
+                        (publish_name_template, pprint.pformat(missing_keys))
                 )
 
             publish_name = pub_tmpl.apply_fields(fields)
@@ -1094,8 +1049,7 @@ class PublishPlugin(HookBaseClass):
         publish_linked_entity_name = None
 
         # Start with the item's fields
-        publish_linked_entity_name_setting.cache["fields"] = copy.copy(item.properties.get("fields", {}))
-        fields = publish_linked_entity_name_setting.cache["fields"]
+        fields = copy.copy(publish_linked_entity_name_setting.extra.get("fields", {}))
 
         # Update the version field with the publish_version
         fields["version"] = item.properties.publish_version
@@ -1110,19 +1064,16 @@ class PublishPlugin(HookBaseClass):
 
             # First get the fields from the context
             try:
-                context_fields = item.context.as_template_fields(pub_linked_entity_name_tmpl)
-                fields.update(context_fields)
-            except TankError, e:
+                fields.update(item.context.as_template_fields(pub_linked_entity_name_tmpl))
+            except TankError:
                 self.logger.debug(
                     "Unable to get context fields for publish_linked_entity_name_template.")
 
             missing_keys = pub_linked_entity_name_tmpl.missing_keys(fields, True)
-            # store the missing keys for this template
-            publish_linked_entity_name_setting.cache["missing_keys"] = missing_keys
             if missing_keys:
                 raise TankMissingTemplateKeysError(
                     "Cannot resolve publish_linked_entity_name_template (%s). Missing keys: %s" %
-                            (publish_linked_entity_name_template, pprint.pformat(missing_keys))
+                        (publish_linked_entity_name_template, pprint.pformat(missing_keys))
                 )
 
             publish_linked_entity_name = pub_linked_entity_name_tmpl.apply_fields(fields)
