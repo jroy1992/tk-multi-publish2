@@ -926,7 +926,7 @@ class PublishPlugin(PluginBase):
         on the right side of the publish UI).
 
         :param parent: The parent to use for the widget being created
-        :param tasks: Tasks to create the settings widget for.
+        :param tasks: List of tasks to create the settings widget for.
         :return: A QtGui.QWidget or subclass that displays information about
             the plugin and/or editable widgets for modifying the plugin's
             settings.
