@@ -203,11 +203,14 @@ class PublishPlugin(HookBaseClass):
         }
         schema["Test List Setting"] = {
             "type": "list",
+            "values": {
+                "type": "str"
+            },
             "allows_empty": True,
             "default_value": ["bla1", "bla2"],
             "description": "Test list setting"
         }
-        schema["Settings To Display"]["values"]["items"] = {
+        schema["Settings To Display"]["default_value"] = {
             "publish_name_template": {
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Name",
@@ -305,7 +308,7 @@ class PublishPlugin(HookBaseClass):
         # Initialize any template settings with the fields stored on the item
         # during collection
         for setting in task_settings.itervalues():
-            if setting.type == "template" and "fields" in item.properties:
+            if setting.value and setting.type == "template" and "fields" in item.properties:
                 setting.extra["fields"] = {}
 
                 tmpl = publisher.get_template_by_name(setting.value)
@@ -314,7 +317,7 @@ class PublishPlugin(HookBaseClass):
                     raise TankMissingTemplateError("The Template '%s' does not exist!" % setting.value)
 
                 # Get the list of fields specific to this template
-                tmpl_keys = tmpl.keys().keys()
+                tmpl_keys = tmpl.keys.keys()
 
                 for k, v in item.properties["fields"].iteritems():
                     if k not in tmpl_keys:
