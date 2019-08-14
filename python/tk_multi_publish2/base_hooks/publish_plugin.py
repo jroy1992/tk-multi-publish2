@@ -210,13 +210,15 @@ class PublishPlugin(PluginBase):
         A widget class representing a generic setting.
         """
         def __init__(self, parent, hook, tasks, name, **kwargs):
-            super(PublishPlugin.SettingWidget, self).__init__(parent, hook, tasks, name, **kwargs)
+            super(PublishPlugin.SettingWidget, self).__init__(
+                parent, hook, tasks, name, **kwargs)
 
             self._layout = QtGui.QVBoxLayout(self)
             self.setLayout(self._layout)
 
             # Get the value_widget
-            self._value_widget = self.value_widget_factory(self._name, self._value, self._editable)
+            self._value_widget = self.value_widget_factory(
+                self._name, self._value, self._editable)
             self._value_widget.setParent(self)
 
             # Add it to the layout
@@ -235,10 +237,12 @@ class PublishPlugin(PluginBase):
         """
         A widget class representing a template setting.
         """
-        TemplateField = collections.namedtuple("TemplateField", "name value editable is_missing")
+        TemplateField = collections.namedtuple("TemplateField",
+            "name value editable is_missing")
 
         def __init__(self, parent, hook, tasks, name, **kwargs):
-            super(PublishPlugin.SettingWidget, self).__init__(parent, hook, tasks, name, **kwargs)
+            super(PublishPlugin.SettingWidget, self).__init__(
+                parent, hook, tasks, name, **kwargs)
 
             self._fields = {}
             self._resolved_value = ""
@@ -249,15 +253,10 @@ class PublishPlugin(PluginBase):
             self._resolved_value_widget = QtGui.QLabel(self)
             self._layout.addWidget(self._resolved_value_widget)
 
-            self._value_layout = QtGui.QFormLayout(self)
-            self._layout.addLayout(self._value_layout)
-
             # Get the value_widget
-            self._value_widget = self.value_widget_factory(self._name, self._value, self._editable)
+            self._value_widget = self.value_widget_factory(
+                self._name, self._value, self._editable)
             self._value_widget.setParent(self)
-
-            # Add it to the value layout
-            self._value_layout.addRow("Template Name", self._value_widget)
 
             # connect the signal
             self._value_widget.value_changed.connect(self.value_changed)
@@ -265,6 +264,9 @@ class PublishPlugin(PluginBase):
             # TODO: dump this in a collapsible widget
             self._fields_layout = QtGui.QFormLayout(self)
             self._layout.addLayout(self._fields_layout)
+
+            # Add the value to the fields layout
+            self._fields_layout.addRow("Template Name", self._value_widget)
 
             # Gather the fields used to resolve the template
             self.gather_fields()
@@ -314,7 +316,8 @@ class PublishPlugin(PluginBase):
             field_value = self.sender().get_value()
 
             # Update the fields dictionary with the widget value
-            self._fields[field_name] = self._fields[field_name]._replace(value=field_value)
+            self._fields[field_name] = self._fields[field_name]._replace(
+                value=field_value, is_missing=False)
 
             # Recalculate the resolved template value
             self.resolve_template_value()
@@ -341,7 +344,8 @@ class PublishPlugin(PluginBase):
                 tmpl = publisher.get_template_by_name(value)
                 if not tmpl:
                     # this template was not found in the template config!
-                    raise TankMissingTemplateError("The Template '%s' does not exist!" % value)
+                    raise TankMissingTemplateError(
+                        "The Template '%s' does not exist!" % value)
 
                 # Get the list of fields specific to this template
                 tmpl_keys = tmpl.keys.keys()
@@ -362,7 +366,8 @@ class PublishPlugin(PluginBase):
                             if fields[k].value != v:
                                 fields[k].value = self.MultiplesValue
                         else:
-                            fields[k] = self.TemplateField(k, v, editable=False, is_missing=False)
+                            fields[k] = self.TemplateField(
+                                k, v, editable=False, is_missing=False)
 
                 # Next get any cached fields
                 if "fields" in task.settings[self._name].extra:
@@ -376,14 +381,16 @@ class PublishPlugin(PluginBase):
                             fields[k] = v
 
                 # Next get the list of missing fields
-                missing_keys = tmpl.missing_keys(dict([(k, v.value) for k, v in fields.iteritems()]), True)
+                tmpl_fields = dict([(k, v.value) for k, v in fields.iteritems()])
+                missing_keys = tmpl.missing_keys(tmpl_fields, True)
                 for k in missing_keys:
                     if k in fields:
                         if fields[k].value is not None:
                             fields[k].value = self.MultiplesValue
                             fields[k].is_missing = True
                     else:
-                        fields[k] = self.TemplateField(k, None, editable=True, is_missing=True)
+                        fields[k] = self.TemplateField(
+                            k, None, editable=True, is_missing=True)
 
             # Now pickup any overridden values already set via the UI
             for field in fields.iterkeys():
@@ -402,8 +409,9 @@ class PublishPlugin(PluginBase):
             # Reset the value
             self._resolved_value = ""
 
-            # If no template defined or not all template values are the same, just bail
+            # If no template defined or not all are the same, just bail
             if self._value in (self.NoneValue, self.MultiplesValue):
+                self._resolved_value = self._value
                 return
 
             # If we are missing any keys, let the user know so they can fill them in.
@@ -414,7 +422,8 @@ class PublishPlugin(PluginBase):
             tmpl = publisher.get_template_by_name(self._value)
             if not tmpl:
                 # this template was not found in the template config!
-                raise TankMissingTemplateError("The Template '%s' does not exist!" % self._value)
+                raise TankMissingTemplateError(
+                    "The Template '%s' does not exist!" % self._value)
 
             # Create the flattened list of fields to apply
             fields = {}
@@ -444,8 +453,8 @@ class PublishPlugin(PluginBase):
             """Update the UI"""
             self._resolved_value_widget.setText(self._resolved_value)
 
-            # Clear the list of fields
-            for i in reversed(range(self._fields_layout.count())):
+            # Clear the list of fields, excluding the template name
+            for i in reversed(range(self._fields_layout.count())[2:]):
                 field_widget = self._fields_layout.itemAt(i).widget()
                 self._fields_layout.removeWidget(field_widget)
                 field_widget.deleteLater()
@@ -453,7 +462,8 @@ class PublishPlugin(PluginBase):
             # And repopulate it
             for field in sorted(self._fields.itervalues(), key=itemgetter(2, 3, 0)):
                 # Create the field widget
-                field_widget = self.value_widget_factory(field.name, field.value, field.editable)
+                field_widget = self.value_widget_factory(
+                    field.name, field.value, field.editable)
                 field_widget.setObjectName(field.name)
                 field_widget.setParent(self)
 
