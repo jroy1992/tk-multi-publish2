@@ -117,8 +117,8 @@ class PublishPlugin(PluginBase):
             self._hook = hook
             self._tasks = tasks
             self._name = name
-            self._display_name = kwargs.pop("display_name", name)
-            self._editable = kwargs.pop("editable", False)
+            self._display_name = kwargs["display_name"].value if "display_name" in kwargs else name
+            self._editable = kwargs["editable"].value if "editable" in kwargs else False
 
             # Get the list of non None, sorted values
             values = [task.settings[name].value for task in self._tasks]
