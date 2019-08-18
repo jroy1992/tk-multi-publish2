@@ -210,44 +210,52 @@ class PublishPlugin(HookBaseClass):
             "default_value": ["bla1", "bla2"],
             "description": "Test list setting"
         }
-        schema["Settings To Display"]["default_value"] = {
-            "publish_name_template": {
+        schema["Settings To Display"]["default_value"] = [
+            {
+                "name": "publish_name_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Name",
                 "editable": False
             },
-            "publish_path_template": {
+            {
+                "name": "publish_path_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Path",
                 "editable": False
             },
-            "publish_symlink_template": {
+            {
+                "name": "publish_symlink_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Symlink",
                 "editable": False
             },
-            "publish_linked_entity_name_template": {
+            {
+                "name": "publish_linked_entity_name_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Linked Entity Name",
                 "editable": False
             },
-            "Test Bool Setting": {
+            {
+                "name": "Test Bool Setting",
                 "type": "SettingWidget",
                 "editable": True
             },
-            "Test Int Setting": {
+            {
+                "name": "Test Int Setting",
                 "type": "SettingWidget",
                 "editable": True
             },
-            "Test String Setting": {
+            {
+                "name": "Test String Setting",
                 "type": "SettingWidget",
                 "editable": True
             },
-            "Test List Setting": {
+            {
+                "name": "Test List Setting",
                 "type": "SettingWidget",
                 "editable": True
             },
-        }
+        ]
         return schema
 
 

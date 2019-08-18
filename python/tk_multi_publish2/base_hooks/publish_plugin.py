@@ -78,25 +78,33 @@ class PublishPlugin(PluginBase):
             task_settings = tasks[0].settings if tasks else {}
 
             # TODO: these should probably be exceptions
-            for setting_name, kwargs in plugin.settings.get("Settings To Display", {}).iteritems():
+            for setting in plugin.settings["Settings To Display"]:
+                kwargs = setting.value
+
+                setting_name = kwargs.pop("name", None)
+                if not setting_name:
+                    plugin.logger.error(
+                        "Entry in 'Settings To Display' is missing its 'name' attribute")
+                    continue
+
                 setting = task_settings.get(setting_name)
                 if not setting:
                     plugin.logger.error("Unknown setting: {}".format(setting_name))
                     continue
 
-                widget_type = kwargs.get("type", None)
+                widget_type = kwargs.pop("type", None)
                 if not widget_type:
                     plugin.logger.error(
                         "No defined widget type for setting: {}".format(setting_name))
                     continue
 
-                if not hasattr(hook, widget_type.value):
-                    plugin.logger.error("Cannot find widget class: {}".format(widget_type.value))
+                if not hasattr(hook, widget_type):
+                    plugin.logger.error("Cannot find widget class: {}".format(widget_type))
                     continue
 
                 # Instantiate the widget class
-                widget_class = getattr(hook, widget_type.value)
-                display_name = kwargs["display_name"].value if "display_name" in kwargs else setting_name
+                widget_class = getattr(hook, widget_type)
+                display_name = kwargs.get("display_name", setting_name)
                 setting_widget = widget_class(self, hook, tasks, setting_name, **kwargs)
                 setting_widget.setObjectName(setting_name)
 
@@ -117,8 +125,8 @@ class PublishPlugin(PluginBase):
             self._hook = hook
             self._tasks = tasks
             self._name = name
-            self._display_name = kwargs["display_name"].value if "display_name" in kwargs else name
-            self._editable = kwargs["editable"].value if "editable" in kwargs else False
+            self._display_name = kwargs.get("display_name", name)
+            self._editable = kwargs.get("editable", False)
 
             # Get the list of non None, sorted values
             values = [task.settings[name].value for task in self._tasks]
@@ -656,16 +664,17 @@ class PublishPlugin(PluginBase):
                 ),
             },
             "Settings To Display": {
-                "type": "dict",
+                "type": "list",
                 "values": {
                     "type": "dict"
                 },
-                "default_value": {},
+                "default_value": [],
                 "allows_empty": True,
                 "description": (
-                    "A dict of settings to display in the UI, keyed by setting name. Each entry in "
-                    "the dict is itself a dict that defines the associated widget class to use, as "
-                    "well as any keyword arguments to pass to the constructor."
+                    "A list of settings to display in the UI. Each entry in the "
+                    "list is a dict that defines the associated widget name and "
+                    "class to use, as well as any keyword arguments to pass to the "
+                    "constructor."
                 ),
             }
         }
