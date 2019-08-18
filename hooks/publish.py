@@ -815,7 +815,7 @@ class PublishPlugin(HookBaseClass):
         return {k: v for k, v in sg_fields.iteritems() if k not in bad_fields}
 
 
-    def _resolve_template_setting_value(self, setting):
+    def _resolve_template_setting_value(self, setting, item):
         """Resolve the setting template value"""
         publisher = self.parent
 
@@ -876,7 +876,7 @@ class PublishPlugin(HookBaseClass):
         if possible.
         """
         publish_path_setting = task_settings.get("publish_path_template")
-        publish_path = self._resolve_template_setting_value(publish_path_setting)
+        publish_path = self._resolve_template_setting_value(publish_path_setting, item)
         if not publish_path:
             self.logger.debug("No publish_path_template defined. Publishing in place.")
             publish_path = item.properties.get("path")
@@ -897,7 +897,7 @@ class PublishPlugin(HookBaseClass):
         if possible.
         """
         publish_path_setting = task_settings.get("publish_symlink_template")
-        publish_path = self._resolve_template_setting_value(publish_path_setting)
+        publish_path = self._resolve_template_setting_value(publish_path_setting, item)
         if publish_path:
             publish_path = sgtk.util.ShotgunPath.normalize(publish_path)
 
@@ -938,7 +938,7 @@ class PublishPlugin(HookBaseClass):
         publisher = self.parent
 
         publish_name_setting = task_settings.get("publish_name_template")
-        publish_name = self._resolve_template_setting_value(publish_name_setting)
+        publish_name = self._resolve_template_setting_value(publish_name_setting, item)
         if not publish_name:
             path = item.properties.get("path")
             # Use built-in method for determining publish_name
@@ -955,4 +955,4 @@ class PublishPlugin(HookBaseClass):
         :param item: The item to determine the publish linked entity name for
         """
         publish_name_setting = task_settings.get("publish_linked_entity_name_template")
-        return self._resolve_template_setting_value(publish_name_setting)
+        return self._resolve_template_setting_value(publish_name_setting, item)
