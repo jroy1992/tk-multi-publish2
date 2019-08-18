@@ -71,7 +71,6 @@ class PublishPlugin(PluginBase):
             plugin = hook.plugin
 
             self._layout = QtGui.QFormLayout(self)
-            self.setLayout(self._layout)
 
             # since tasks will be of same type it's safe to assume they will all
             # share the same list of settings
@@ -671,10 +670,9 @@ class PublishPlugin(PluginBase):
                 "default_value": [],
                 "allows_empty": True,
                 "description": (
-                    "A list of settings to display in the UI. Each entry in the "
-                    "list is a dict that defines the associated widget name and "
-                    "class to use, as well as any keyword arguments to pass to the "
-                    "constructor."
+                    "A list of settings to display in the UI. Each entry in the list is a dict "
+                    "that defines the associated setting name, the widget class to use, as well "
+                    "as any keyword arguments to pass to the constructor."
                 ),
             }
         }
