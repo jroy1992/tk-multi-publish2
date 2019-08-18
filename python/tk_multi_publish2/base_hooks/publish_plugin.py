@@ -214,7 +214,6 @@ class PublishPlugin(PluginBase):
                 parent, hook, tasks, name, **kwargs)
 
             self._layout = QtGui.QVBoxLayout(self)
-            self.setLayout(self._layout)
 
             # Get the value_widget
             self._value_widget = self.value_widget_factory(
@@ -248,7 +247,6 @@ class PublishPlugin(PluginBase):
             self._resolved_value = ""
 
             self._layout = QtGui.QVBoxLayout(self)
-            self.setLayout(self._layout)
 
             self._resolved_value_widget = QtGui.QLabel(self)
             self._layout.addWidget(self._resolved_value_widget)
@@ -262,7 +260,7 @@ class PublishPlugin(PluginBase):
             self._value_widget.value_changed.connect(self.value_changed)
 
             # TODO: dump this in a collapsible widget
-            self._fields_layout = QtGui.QFormLayout(self)
+            self._fields_layout = QtGui.QFormLayout()
             self._layout.addLayout(self._fields_layout)
 
             # Add the value to the fields layout
