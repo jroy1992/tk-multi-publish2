@@ -38,9 +38,10 @@ class PublishPlugin(PluginBase):
             self.description_widget = PublishPlugin.DescriptionWidget(parent, hook)
             self.addTab(self.description_widget, "Description")
 
-            # Next add the settings widget
-            self.settings_widget = PublishPlugin.SettingsWidgetController(parent, hook, tasks)
-            self.addTab(self.settings_widget, "Settings")
+            # Next add the settings widget if there are settings to display
+            if hook.plugin.settings["Settings To Display"]:
+                self.settings_widget = PublishPlugin.SettingsWidgetController(parent, hook, tasks)
+                self.addTab(self.settings_widget, "Settings")
 
     class DescriptionWidget(QtGui.QWidget):
         """
@@ -114,9 +115,10 @@ class PublishPlugin(PluginBase):
         """
         Base Class for creating any custom settings widgets.
         """
+        WarnColor = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_HIGHLIGHT_COLOR"]
         ErrorColor = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_ALERT_COLOR"]
-        NoneValue = "(None)"
-        MultiplesValue = "<font color='{}'>{}</font>".format(ErrorColor, "(Multiple Values Exist)")
+        MultiplesValue = "<font color='{}'>{}</font>".format(WarnColor, "(Multiple Values Exist)")
+        NoneValue = "<font color='{}'>{}</font>".format(ErrorColor, "(None)")
 
         def __init__(self, parent, hook, tasks, name, **kwargs):
             QtGui.QWidget.__init__(self, parent)
@@ -124,8 +126,8 @@ class PublishPlugin(PluginBase):
             self._hook = hook
             self._tasks = tasks
             self._name = name
-            self._display_name = kwargs.get("display_name", name)
-            self._editable = kwargs.get("editable", False)
+            self._display_name = kwargs.pop("display_name", name)
+            self._editable = kwargs.pop("editable", False)
 
             # Get the list of non None, sorted values
             values = [task.settings[name].value for task in self._tasks]
@@ -369,7 +371,8 @@ class PublishPlugin(PluginBase):
                             continue
                         if k in fields:
                             if fields[k].value != v:
-                                fields[k].value = self.MultiplesValue
+                                fields[k] = self.TemplateField(k, self.MultiplesValue,
+                                    editable=False, is_missing=False)
                         else:
                             fields[k] = self.TemplateField(
                                 k, v, editable=False, is_missing=False)
@@ -381,7 +384,8 @@ class PublishPlugin(PluginBase):
                             continue
                         if k in fields:
                             if fields[k].value != v.value:
-                                fields[k].value = self.MultiplesValue
+                                fields[k] = self.TemplateField(k, self.MultiplesValue,
+                                    editable=v.editable, is_missing=False)
                         else:
                             fields[k] = v
 
@@ -391,8 +395,8 @@ class PublishPlugin(PluginBase):
                 for k in missing_keys:
                     if k in fields:
                         if fields[k].value is not None:
-                            fields[k].value = self.MultiplesValue
-                            fields[k].is_missing = True
+                            fields[k] = self.TemplateField(k, self.MultiplesValue,
+                                editable=True, is_missing=True)
                     else:
                         fields[k] = self.TemplateField(
                             k, None, editable=True, is_missing=True)
