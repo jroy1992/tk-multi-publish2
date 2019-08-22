@@ -128,6 +128,8 @@ class CollectorPlugin(HookBaseClass):
             properties=properties
         )
 
+        self.logger.debug("Added %s of type %s" % (item_name, item_type))
+
         # construct a full path to the icon given the name defined above
         icon_path = publisher.expand_path(icon_path)
 
