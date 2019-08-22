@@ -195,7 +195,9 @@ class FileCollectorPlugin(HookBaseClass):
                     "type": "int",
                     "default_value": 0,
                     "allows_empty": True,
-                    "description": "Resolution order to follow in case of conflicts."
+                    "description": "Resolution order to follow when multiple item types"
+                                   "are available the same extension, lower resolution order gets higher priority."
+                                   "Item type with a matching work_path_template, gets priority of -1."
                 }
             }
         )
