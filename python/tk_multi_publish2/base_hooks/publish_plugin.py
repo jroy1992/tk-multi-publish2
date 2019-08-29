@@ -191,9 +191,9 @@ class PublishPlugin(PluginBase):
 
             # If the signal is not from ourselves, ensure it is in the list of
             # linked settings
-            if value_widget is not self._value_widget or \
+            if value_widget.parent is not self and \
                 value_widget.get_field_name() not in self._linked_settings:
-                    return
+                return
 
             # TODO: Implement value validation before update.
             self._value = value_widget.get_value()
