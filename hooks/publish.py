@@ -215,25 +215,29 @@ class PublishPlugin(HookBaseClass):
                 "name": "publish_name_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Name",
-                "editable": False
+                "editable": False,
+                "linked_fields": ["name"]
             },
             {
                 "name": "publish_path_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Path",
-                "editable": False
+                "editable": False,
+                "linked_fields": ["name"]
             },
             {
                 "name": "publish_symlink_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Symlink",
-                "editable": False
+                "editable": False,
+                "linked_fields": ["name"]
             },
             {
                 "name": "publish_linked_entity_name_template",
                 "type": "TemplateSettingWidget",
                 "display_name": "Publish Linked Entity Name",
-                "editable": False
+                "editable": False,
+                "linked_fields": ["name"]
             },
             {
                 "name": "Test Bool Setting",
@@ -324,12 +328,13 @@ class PublishPlugin(HookBaseClass):
                 # Add in any relevant keys stored on the item
                 for k, v in item.properties.get("fields", {}).iteritems():
                     setting.extra["fields"][k] = \
-                        self.TemplateSettingWidget.TemplateField(k, v, editable=True, is_missing=False)
+                        self.TemplateSettingWidget.TemplateField(
+                            k, v, "str", editable=True, is_missing=False)
 
                 # Add in the version key if applicable
                 setting.extra["fields"]["version"] = \
                     self.TemplateSettingWidget.TemplateField(
-                        "version", publish_version, editable=False, is_missing=False)
+                        "version", publish_version, "str", editable=False, is_missing=False)
 
         return task_settings
 

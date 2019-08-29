@@ -14,6 +14,7 @@ from operator import itemgetter
 import sgtk
 from sgtk import TankError, TankMissingTemplateError
 from sgtk.platform.qt import QtCore, QtGui
+from sgtk.platform.validation import convert_string_to_type
 
 from .base import PluginBase
 
@@ -67,6 +68,9 @@ class PublishPlugin(PluginBase):
         """
         Controller that creates the widgets for each setting.
         """
+        # Signal for when a property value has changed
+        setting_changed = QtCore.Signal()
+
         def __init__(self, parent, hook, tasks):
             QtGui.QWidget.__init__(self, parent)
             plugin = hook.plugin
@@ -111,23 +115,13 @@ class PublishPlugin(PluginBase):
                 # Add a row entry
                 self._layout.addRow(display_name, setting_widget)
 
-    class SettingWidgetBaseClass(QtGui.QWidget):
+    class SettingWidgetBaseClass(ValueWidgetBaseClass):
         """
         Base Class for creating any custom settings widgets.
         """
-        WarnColor = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_HIGHLIGHT_COLOR"]
-        ErrorColor = sgtk.platform.constants.SG_STYLESHEET_CONSTANTS["SG_ALERT_COLOR"]
-        MultiplesValue = "<font color='{}'>{}</font>".format(WarnColor, "(Multiple Values Exist)")
-        NoneValue = "<font color='{}'>{}</font>".format(ErrorColor, "(None)")
-
         def __init__(self, parent, hook, tasks, name, **kwargs):
-            QtGui.QWidget.__init__(self, parent)
 
-            self._hook = hook
             self._tasks = tasks
-            self._name = name
-            self._display_name = kwargs.pop("display_name", name)
-            self._editable = kwargs.pop("editable", False)
 
             # Get the list of non None, sorted values
             values = [task.settings[name].value for task in self._tasks]
@@ -135,89 +129,35 @@ class PublishPlugin(PluginBase):
             values.sort(reverse=True)
 
             # Get the number of unique values
-            data_type = self._tasks[0].settings[name].type
-            if data_type == "list":
+            value_type = self._tasks[0].settings[name].type
+            if value_type == "list":
                 num_values = len(set([tuple(l) for l in values]))
-            elif data_type == "dict":
+            elif value_type == "dict":
                 num_values = len(set([frozenset(d.items()) for d in values]))
             else:
                 num_values = len(set(values))
 
             if num_values > 1:
-                self._value = self.MultiplesValue
+                value = self.MultiplesValue
             elif num_values < 1:
-                self._value = self.NoneValue
+                value = None
             else:
-                self._value = values.pop()
+                value = values.pop()
 
-        @classmethod
-        def value_widget_factory(cls, name, value, editable=True):
-            """
-            Creates a standardized widget based on the value's type
-            """
-            # import the shotgun_fields module from the qtwidgets framework
-            engine = sgtk.platform.current_engine()
-            qtwidgets = sgtk.platform.framework.load_framework(
-                engine, engine.context, engine.env, "tk-framework-qtwidgets_v2.x.x")
-            shotgun_fields = qtwidgets.import_module("shotgun_fields")
-
-            if isinstance(value, bool):
-                display_widget = shotgun_fields.checkbox_widget.CheckBoxWidget(field_name=name)
-                editor_widget = shotgun_fields.checkbox_widget.CheckBoxWidget(field_name=name)
-            elif isinstance(value, float):
-                display_widget = shotgun_fields.float_widget.FloatWidget(field_name=name)
-                editor_widget = shotgun_fields.float_widget.FloatEditorWidget(field_name=name)
-            elif isinstance(value, (int, long)):
-                display_widget = shotgun_fields.number_widget.NumberWidget(field_name=name)
-                editor_widget = shotgun_fields.number_widget.NumberEditorWidget(field_name=name)
-            elif isinstance(value, str):
-                display_widget = shotgun_fields.text_widget.TextWidget(field_name=name)
-                editor_widget = shotgun_fields.text_widget.TextEditorWidget(field_name=name)
-            # TODO: Implement a custom List Editor widget.
-            # https://doc.qt.io/archives/qq/qq11-stringlistedit.html
-            # elif isinstance(value, list):
-            #     display_widget = shotgun_fields.list_widget.ListWidget(field_name=name)
-            #     editor_widget = shotgun_fields.list_widget.ListEditorWidget(field_name=name)
-            else:
-                display_widget = shotgun_fields.text_widget.TextWidget(field_name=name)
-                editor_widget = shotgun_fields.text_widget.TextEditorWidget(field_name=name)
-
-            if editable:
-                value_widget = shotgun_fields.shotgun_field_editable.ShotgunFieldEditable(
-                    display_widget, editor_widget)
-                value_widget.enable_editing(editable)
-            else:
-                value_widget = shotgun_fields.shotgun_field_editable.ShotgunFieldNotEditable(
-                    display_widget)
-
-            value_widget.set_value(value)
-
-            # If there are multiple values, add a warning to the tooltip that changing
-            # the value will change it for all entities.
-            if value == cls.MultiplesValue:
-                value_widget.setToolTip(
-                    "<p>{}</p><p><b><font color='{}'>{}</font></b></p>".format(
-                        "*Will overwrite the value for all selected entities*",
-                        value,
-                        cls.ErrorColor
-                    )
-                )
-            return value_widget
+            super(PublishPlugin.SettingWidgetBaseClass, self).__init__(
+                parent, hook, name, value, value_type, **kwargs)
 
         @property
-        def name(self):
-            """Return the setting name"""
-            return self._name
-
-        @property
-        def value(self):
-            """Return the setting value"""
-            return self._value
+        def tasks(self):
+            return self._tasks
 
     class SettingWidget(SettingWidgetBaseClass):
         """
         A widget class representing a generic setting.
         """
+        # Signal for when a setting value has changed
+        value_changed = QtCore.Signal()
+
         def __init__(self, parent, hook, tasks, name, **kwargs):
             super(PublishPlugin.SettingWidget, self).__init__(
                 parent, hook, tasks, name, **kwargs)
@@ -226,33 +166,87 @@ class PublishPlugin(PluginBase):
 
             # Get the value_widget
             self._value_widget = self.value_widget_factory(
-                self._name, self._value, self._editable)
+                self._name, self._value, self._value_type, self._editable)
             self._value_widget.setParent(self)
 
             # Add it to the layout
             self._layout.addWidget(self._value_widget)
             self._layout.addStretch()
 
-            # connect the signal
-            self._value_widget.value_changed.connect(self.value_changed)
+            # Connect the value_changed signal to the setting_changed signal so
+            # all other settings will be notified about the change
+            self._value_widget.value_changed.connect(parent.setting_changed)
 
-        def value_changed(self):
+            # Connect the setting_changed signal to the update_value slot so that
+            # this widget will update whenever any setting is changed.
+            parent.setting_changed.connect(self.update_value)
+
+        @QtCore.Slot()
+        def update_value(self):
+
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget
+            value_widget = self.sender().sender()
+
+            # If the signal is not from ourselves, ensure it is in the list of
+            # linked settings
+            if value_widget is not self._value_widget or \
+                value_widget.get_field_name() not in self._linked_settings:
+                    return
+
             # TODO: Implement value validation before update.
+            self._value = value_widget.get_value()
+
+            # Convert any NoneStr values to real None
+            if self._value == self.NoneValue:
+                self._value = None
+            # Check if the user has set the value to an empty string and if so,
+            # update the widget to show NoneStr
+            elif self._value == "":
+                self._value = None
+                self._value_widget.set_value(self.NoneStr)
+                self._value_widget.update()
+            # Else ensure that we are casting the value to its correct type
+            elif self._value != self.MultiplesValue:
+                value_type = type(self._value).__name__
+                if value_type != self._value_type:
+                    if value_type == "str":
+                        self._value = convert_string_to_type(self._value, self._value_type)
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}' to '{}'".format(
+                                value_type, self._value_type))
+
+            # Emit that our value has changed
+            self.value_changed.emit()
+
+            # Cache out the value
             for task in self._tasks:
-                task.settings[self._name].value = self._value_widget.get_value()
+                if self._value == self.MultiplesValue:
+                    # Skip caching the value if its a multiple
+                    continue
+                # Only overwrite valid values
+                task.settings[self._name].value = self._value
 
     class TemplateSettingWidget(SettingWidget):
         """
         A widget class representing a template setting.
         """
         TemplateField = collections.namedtuple("TemplateField",
-            "name value editable is_missing")
+            "name value type editable is_missing")
+
+        # Signal for when a setting field has changed
+        field_changed = QtCore.Signal(TemplateField)
 
         def __init__(self, parent, hook, tasks, name, **kwargs):
+
+            self._linked_fields = kwargs.pop("linked_fields", [])
+
             super(PublishPlugin.SettingWidget, self).__init__(
                 parent, hook, tasks, name, **kwargs)
 
             self._fields = {}
+            self._field_widgets = {}
             self._resolved_value = ""
 
             self._layout = QtGui.QVBoxLayout(self)
@@ -262,11 +256,16 @@ class PublishPlugin(PluginBase):
 
             # Get the value_widget
             self._value_widget = self.value_widget_factory(
-                self._name, self._value, self._editable)
+                self._name, self._value, self._value_type, self._editable)
             self._value_widget.setParent(self)
 
-            # connect the signal
-            self._value_widget.value_changed.connect(self.value_changed)
+            # Connect the value_changed signal to the setting_changed signal so
+            # all other settings will be notified about the change
+            self._value_widget.value_changed.connect(parent.setting_changed)
+
+            # Connect the setting_changed signal to the update_value slot so that
+            # this widget will update whenever any setting is changed.
+            parent.setting_changed.connect(self.update_value)
 
             # TODO: dump this in a collapsible widget
             self._fields_layout = QtGui.QFormLayout()
@@ -297,11 +296,12 @@ class PublishPlugin(PluginBase):
             """Return the setting resolved value"""
             return self._resolved_value
 
-        def value_changed(self):
+        @QtCore.Slot()
+        def update_value(self):
             """
             Handle when the template value has changed
             """
-            super(PublishPlugin.TemplateSettingWidget, self).value_changed()
+            super(PublishPlugin.TemplateSettingWidget, self).update_value()
 
             # Regather the fields used to resolve the template
             self.gather_fields()
@@ -315,16 +315,57 @@ class PublishPlugin(PluginBase):
             # Update the ui
             self.refresh_ui()
 
-        def field_changed(self):
+        @QtCore.Slot()
+        def update_field(self):
             """
             Handle when a field value has changed
             """
-            field_name = self.sender().get_field_name()
-            field_value = self.sender().get_value()
+            do_full_refresh = False
+
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget/field_widget
+            field_widget = self.sender().sender()
+
+            field_name = field_widget.get_field_name()
+            field_value = field_widget.get_value()
+
+            # If the sender is from another setting, check that the field matches
+            # one of this setting's linked fields, else ignore
+            if field_widget.parent != self and \
+                (field_name not in self._linked_fields or
+                 field_name not in self._field_widgets):
+                return
+
+            # Convert any NoneStr values to real None
+            if field_value == self.NoneValue:
+                field_value = None
+            # Check if the user has set the value to an empty string and if so,
+            # update the widget to show the NoneStr
+            elif field_value == "":
+                field_value = None
+                self._field_widgets[field_name].set_value(self.NoneStr)
+                self._field_widgets[field_name].update()
+            # Else ensure that we are casting the value to its correct type
+            elif field_value != self.MultiplesValue:
+                value_type = type(field_value).__name__
+                field_type = self._fields[field_name].type
+                if value_type != field_type:
+                    if value_type == "str":
+                        field_value = convert_string_to_type(field_value, field_type)
+                        # Need to replace the field widget for this guy, so do a
+                        # full refresh
+                        do_full_refresh = True
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}'' to '{}'".format(
+                                value_type, field_type))
 
             # Update the fields dictionary with the widget value
             self._fields[field_name] = self._fields[field_name]._replace(
                 value=field_value, is_missing=False)
+
+            # Emit that our field value has changed
+            self.field_changed.emit(self._fields[field_name])
 
             # Recalculate the resolved template value
             self.resolve_template_value()
@@ -333,7 +374,10 @@ class PublishPlugin(PluginBase):
             self.cache_data()
 
             # Update the ui
-            self._resolved_value_widget.setText(self._resolved_value)
+            if do_full_refresh:
+                self.refresh_ui()
+            else:
+                self._resolved_value_widget.setText(self._resolved_value)
 
         def gather_fields(self):
             """
@@ -371,11 +415,11 @@ class PublishPlugin(PluginBase):
                             continue
                         if k in fields:
                             if fields[k].value != v:
-                                fields[k] = self.TemplateField(k, self.MultiplesValue,
-                                    editable=False, is_missing=False)
+                                fields[k] = fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=False)
                         else:
                             fields[k] = self.TemplateField(
-                                k, v, editable=False, is_missing=False)
+                                k, v, "str", editable=False, is_missing=False)
 
                 # Next get any cached fields
                 if "fields" in task.settings[self._name].extra:
@@ -384,8 +428,8 @@ class PublishPlugin(PluginBase):
                             continue
                         if k in fields:
                             if fields[k].value != v.value:
-                                fields[k] = self.TemplateField(k, self.MultiplesValue,
-                                    editable=v.editable, is_missing=False)
+                                fields[k] = fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=False)
                         else:
                             fields[k] = v
 
@@ -395,11 +439,11 @@ class PublishPlugin(PluginBase):
                 for k in missing_keys:
                     if k in fields:
                         if fields[k].value is not None:
-                            fields[k] = self.TemplateField(k, self.MultiplesValue,
-                                editable=True, is_missing=True)
+                            fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=True)
                     else:
                         fields[k] = self.TemplateField(
-                            k, None, editable=True, is_missing=True)
+                            k, None, "str", editable=True, is_missing=True)
 
             # Now pickup any overridden values already set via the UI
             for field in fields.iterkeys():
@@ -419,8 +463,11 @@ class PublishPlugin(PluginBase):
             self._resolved_value = ""
 
             # If no template defined or not all are the same, just bail
-            if self._value in (self.NoneValue, self.MultiplesValue):
-                self._resolved_value = self._value
+            if self._value is None:
+                self._resolved_value = self.NoneStr
+                return
+            elif self._value == self.MultiplesValue:
+                self._resolved_value = self.MultiplesStr
                 return
 
             # If we are missing any keys, let the user know so they can fill them in.
@@ -456,7 +503,11 @@ class PublishPlugin(PluginBase):
                 # Store the field values in the "extra" section of the settings obj
                 if "fields" not in task.settings[self._name].extra:
                     task.settings[self._name].extra["fields"] = {}
-                task.settings[self._name].extra["fields"].update(self._fields)
+                for name, field in self._fields.iteritems():
+                    if field.value == self.MultiplesValue:
+                        # Don't override value with multiples key
+                        continue
+                    task.settings[self._name].extra["fields"][name] = field
 
         def refresh_ui(self):
             """Update the UI"""
@@ -469,18 +520,25 @@ class PublishPlugin(PluginBase):
                 field_widget.deleteLater()
 
             # And repopulate it
+            self._field_widgets = {}
             for field in sorted(self._fields.itervalues(), key=itemgetter(2, 3, 0)):
                 # Create the field widget
                 field_widget = self.value_widget_factory(
-                    field.name, field.value, field.editable)
+                    field.name, field.value, field.type, field.editable)
                 field_widget.setObjectName(field.name)
                 field_widget.setParent(self)
 
                 # Add a row entry
                 self._fields_layout.addRow(field.name, field_widget)
+                self._field_widgets[field.name] = field_widget
 
-                # connect the signal
-                field_widget.value_changed.connect(self.field_changed)
+                # Connect the value_changed signal to the setting_changed signal so
+                # all other settings will be notified about the change
+                field_widget.value_changed.connect(self.parent.setting_changed)
+
+                # Connect the setting_changed signal to the update_field slot so that
+                # this widget will update whenever any setting is changed.
+                self.parent.setting_changed.connect(self.update_field)
 
 
     ############################################################################

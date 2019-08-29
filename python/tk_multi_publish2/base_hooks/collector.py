@@ -9,6 +9,8 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import sgtk
+from sgtk.platform.qt import QtCore, QtGui
+from sgtk.platform.validation import convert_string_to_type
 
 from .base import PluginBase
 
@@ -20,6 +22,130 @@ class CollectorPlugin(PluginBase):
     file browser or dragged and dropped into the Publish2 UI. It is also used
     to gather items to be published within the current DCC session.
     """
+    class PropertiesWidgetController(QtGui.QWidget):
+        """
+        Controller that creates the widgets for each item property.
+        """
+        # Signal for when a property value has changed
+        property_changed = QtCore.Signal()
+
+        def __init__(self, parent, hook, items):
+            QtGui.QWidget.__init__(self, parent)
+            plugin = hook.plugin
+
+            self._layout = QtGui.QFormLayout(self)
+
+            for setting in plugin.settings["Properties To Display"]:
+                kwargs = setting.value
+
+                # TODO: this should probably be an exception
+                name = kwargs.pop("name", None)
+                if not name:
+                    plugin.logger.error(
+                        "Entry in 'Properties To Display' is missing its 'name' attribute")
+                    continue
+
+                # Instantiate the widget class
+                display_name = kwargs.get("display_name", name)
+                property_widget = CollectorPlugin.PropertyWidget(self, hook, items, name, **kwargs)
+                property_widget.setObjectName(name)
+
+                # Add a row entry
+                self._layout.addRow(display_name, property_widget)
+
+    class PropertyWidget(ValueWidgetBaseClass):
+        """
+        A widget class representing an item property.
+        """
+        # Signal for when a property value has changed
+        value_changed = QtCore.Signal()
+
+        def __init__(self, parent, hook, items, name, **kwargs):
+
+            self._items = items
+
+            # Get the list of non None, sorted values
+            values = [items.properties.get(name) for item in self._items]
+            values = filter(lambda x: x is not None, values)
+            values.sort(reverse=True)
+
+            # Get the number of unique values
+            value_type = kwargs.pop("type", type(values[0]).__name__)
+            if value_type == "list":
+                num_values = len(set([tuple(l) for l in values]))
+            elif value_type == "dict":
+                num_values = len(set([frozenset(d.items()) for d in values]))
+            else:
+                num_values = len(set(values))
+
+            if num_values > 1:
+                value = self.MultiplesValue
+            elif num_values < 1:
+                value = None
+            else:
+                value = values.pop()
+
+            super(CollectorPlugin.PropertyWidget, self).__init__(
+                parent, hook, name, value, value_type, **kwargs)
+
+            self._layout = QtGui.QVBoxLayout(self)
+
+            # Get the value_widget
+            self._value_widget = self.value_widget_factory(
+                self._name, self._value, self._value_type, self._editable)
+            self._value_widget.setParent(self)
+
+            # Add it to the layout
+            self._layout.addWidget(self._value_widget)
+            self._layout.addStretch()
+
+            # Connect the signal
+            self._value_widget.value_changed.connect(self.update_value)
+
+            # Connect to the property_changed signal so external processes can
+            # react accordingly (i.e. rerun init_task_settings)
+            self.value_changed.connect(parent.property_changed)
+
+        @QtCore.Slot()
+        def update_value(self):
+            # TODO: Implement value validation before update.
+
+            self._value = self.sender().get_value()
+
+            # Convert any NoneStr values to real None
+            if self._value == self.NoneValue:
+                self._value = None
+            # Check if the user has set the value to an empty string and if so,
+            # update the widget to show NoneStr
+            elif self._value == "":
+                self._value = None
+                self._value_widget.set_value(self.NoneStr)
+                self._value_widget.update()
+            # Else ensure that we are casting the value to its correct type
+            elif self._value != self.MultiplesValue:
+                value_type = type(self._value).__name__
+                if value_type != self._value_type:
+                    if value_type == "str":
+                        self._value = convert_string_to_type(self._value, self._value_type)
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}' to '{}'".format(
+                                value_type, self._value_type))
+
+            # Emit that our value has changed
+            self.value_changed.emit()
+
+            # Cache out the value
+            for item in self._items:
+                if self._value == self.MultiplesValue:
+                    # Skip caching the value if its a multiple
+                    continue
+                # Only overwrite valid values
+                item.properties[self._name] = self._value
+
+        @property
+        def items(self):
+            return self._items
 
     ############################################################################
     # Collector properties
