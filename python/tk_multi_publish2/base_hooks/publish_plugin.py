@@ -122,6 +122,7 @@ class PublishPlugin(PluginBase):
         def __init__(self, parent, hook, tasks, name, **kwargs):
 
             self._tasks = tasks
+            self._linked_settings = kwargs.pop("linked_settings", [])
 
             # Get the list of non None, sorted values
             values = [task.settings[name].value for task in self._tasks]
