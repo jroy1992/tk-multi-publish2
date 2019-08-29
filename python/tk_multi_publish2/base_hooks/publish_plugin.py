@@ -332,7 +332,7 @@ class PublishPlugin(PluginBase):
 
             # If the sender is from another setting, check that the field matches
             # one of this setting's linked fields, else ignore
-            if field_widget.parent != self and \
+            if field_widget.parent is not self and \
                 (field_name not in self._linked_fields or
                  field_name not in self._field_widgets):
                 return
