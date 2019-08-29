@@ -63,6 +63,7 @@ class PluginBase(HookBaseClass):
                 display_widget = shotgun_fields.number_widget.NumberWidget(field_name=name)
                 editor_widget = shotgun_fields.number_widget.NumberEditorWidget(field_name=name)
             elif value_type == "str":
+                # TODO: Implement a QLineEdit version of this...
                 display_widget = shotgun_fields.text_widget.TextWidget(field_name=name)
                 editor_widget = shotgun_fields.text_widget.TextEditorWidget(field_name=name)
             # TODO: Implement a custom List Editor widget.
@@ -84,8 +85,10 @@ class PluginBase(HookBaseClass):
 
             # Add some HTML formatting for Multiples and None
             if value == cls.MultiplesValue:
+                # TODO: Set this as placeholder text instead
                 value_widget.set_value(cls.MultiplesStr)
             elif value == cls.NoneValue:
+                # TODO: Set this as placeholder text instead
                 value_widget.set_value(cls.NoneStr)
             else:
                 value_widget.set_value(value)

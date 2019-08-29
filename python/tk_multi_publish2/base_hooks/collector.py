@@ -53,7 +53,7 @@ class CollectorPlugin(PluginBase):
                 # Add a row entry
                 self._layout.addRow(display_name, property_widget)
 
-    class PropertyWidget(ValueWidgetBaseClass):
+    class PropertyWidget(PluginBase.ValueWidgetBaseClass):
         """
         A widget class representing an item property.
         """
@@ -106,21 +106,19 @@ class CollectorPlugin(PluginBase):
             # react accordingly (i.e. rerun init_task_settings)
             self.value_changed.connect(parent.property_changed)
 
-        @QtCore.Slot()
+#        @QtCore.Slot()
         def update_value(self):
+
+            # The sender is a value widget
+            value_widget = self.sender()
+            field_name = value_widget.get_field_name()
+
             # TODO: Implement value validation before update.
+            self._value = value_widget.get_value()
 
-            self._value = self.sender().get_value()
-
-            # Convert any NoneStr values to real None
-            if self._value == self.NoneValue:
+            # Convert any NoneStr values or empty strings to real None
+            if self._value in (self.NoneValue, ""):
                 self._value = None
-            # Check if the user has set the value to an empty string and if so,
-            # update the widget to show NoneStr
-            elif self._value == "":
-                self._value = None
-                self._value_widget.set_value(self.NoneStr)
-                self._value_widget.update()
             # Else ensure that we are casting the value to its correct type
             elif self._value != self.MultiplesValue:
                 value_type = type(self._value).__name__
@@ -131,6 +129,20 @@ class CollectorPlugin(PluginBase):
                         raise TypeError(
                             "Unknown conversion from type '{}' to '{}'".format(
                                 value_type, self._value_type))
+
+            # If this is coming from a different widget, we need to update
+            # this widget with the value
+            if value_widget is not self._value_widget:
+                signals_blocked = self._value_widget.blockSignals(True)
+                try:
+                    if self._value == self.MultiplesValue:
+                        self._value_widget.set_value(self.MultiplesStr)
+                    elif self._value == self.NoneValue:
+                        self._value_widget.set_value(self.NoneStr)
+                    else:
+                        self._value_widget.set_value(self._value)
+                finally:
+                    self._value_widget.blockSignals(signals_blocked)
 
             # Emit that our value has changed
             self.value_changed.emit()

@@ -35,14 +35,14 @@ class PublishPlugin(PluginBase):
         def __init__(self, parent, hook, tasks):
             QtGui.QTabWidget.__init__(self, parent)
 
-            # First add the description widget
-            self.description_widget = PublishPlugin.DescriptionWidget(parent, hook)
-            self.addTab(self.description_widget, "Description")
-
             # Next add the settings widget if there are settings to display
             if hook.plugin.settings["Settings To Display"]:
                 self.settings_widget = PublishPlugin.SettingsWidgetController(parent, hook, tasks)
                 self.addTab(self.settings_widget, "Settings")
+
+            # First add the description widget
+            self.description_widget = PublishPlugin.DescriptionWidget(parent, hook)
+            self.addTab(self.description_widget, "Description")
 
     class DescriptionWidget(QtGui.QWidget):
         """
@@ -68,7 +68,7 @@ class PublishPlugin(PluginBase):
         """
         Controller that creates the widgets for each setting.
         """
-        # Signal for when a property value has changed
+        # Signal for when a setting value has changed
         setting_changed = QtCore.Signal()
 
         def __init__(self, parent, hook, tasks):
@@ -115,7 +115,7 @@ class PublishPlugin(PluginBase):
                 # Add a row entry
                 self._layout.addRow(display_name, setting_widget)
 
-    class SettingWidgetBaseClass(ValueWidgetBaseClass):
+    class SettingWidgetBaseClass(PluginBase.ValueWidgetBaseClass):
         """
         Base Class for creating any custom settings widgets.
         """
@@ -164,6 +164,7 @@ class PublishPlugin(PluginBase):
                 parent, hook, tasks, name, **kwargs)
 
             self._layout = QtGui.QVBoxLayout(self)
+            self._layout.setContentsMargins(0, 5, 0, 2)
 
             # Get the value_widget
             self._value_widget = self.value_widget_factory(
@@ -182,31 +183,26 @@ class PublishPlugin(PluginBase):
             # this widget will update whenever any setting is changed.
             parent.setting_changed.connect(self.update_value)
 
-        @QtCore.Slot()
+#        @QtCore.Slot()
         def update_value(self):
 
             # The sender is the controller widget, which received its signal
             # from a SettingsWidget value_widget
             value_widget = self.sender().sender()
+            field_name = value_widget.get_field_name()
 
             # If the signal is not from ourselves, ensure it is in the list of
             # linked settings
-            if value_widget.parent is not self and \
-                value_widget.get_field_name() not in self._linked_settings:
+            if value_widget.parent() is not self and \
+                field_name not in self._linked_settings:
                 return
 
             # TODO: Implement value validation before update.
             self._value = value_widget.get_value()
 
-            # Convert any NoneStr values to real None
-            if self._value == self.NoneValue:
+            # Convert any NoneStr values or empty strings to real None
+            if self._value in (self.NoneValue, ""):
                 self._value = None
-            # Check if the user has set the value to an empty string and if so,
-            # update the widget to show NoneStr
-            elif self._value == "":
-                self._value = None
-                self._value_widget.set_value(self.NoneStr)
-                self._value_widget.update()
             # Else ensure that we are casting the value to its correct type
             elif self._value != self.MultiplesValue:
                 value_type = type(self._value).__name__
@@ -217,6 +213,20 @@ class PublishPlugin(PluginBase):
                         raise TypeError(
                             "Unknown conversion from type '{}' to '{}'".format(
                                 value_type, self._value_type))
+
+            # If this is coming from a different widget, we need to update
+            # this widget with the value
+            if value_widget is not self._value_widget:
+                signals_blocked = self._value_widget.blockSignals(True)
+                try:
+                    if self._value == self.MultiplesValue:
+                        self._value_widget.set_value(self.MultiplesStr)
+                    elif self._value == self.NoneValue:
+                        self._value_widget.set_value(self.NoneStr)
+                    else:
+                        self._value_widget.set_value(self._value)
+                finally:
+                    self._value_widget.blockSignals(signals_blocked)
 
             # Emit that our value has changed
             self.value_changed.emit()
@@ -251,6 +261,7 @@ class PublishPlugin(PluginBase):
             self._resolved_value = ""
 
             self._layout = QtGui.QVBoxLayout(self)
+            self._layout.setContentsMargins(0, 6, 0, 2)
 
             self._resolved_value_widget = QtGui.QLabel(self)
             self._layout.addWidget(self._resolved_value_widget)
@@ -270,6 +281,8 @@ class PublishPlugin(PluginBase):
 
             # TODO: dump this in a collapsible widget
             self._fields_layout = QtGui.QFormLayout()
+            self._fields_layout.setContentsMargins(0, 0, 0, 0)
+            self._fields_layout.setVerticalSpacing(1)
             self._layout.addLayout(self._fields_layout)
 
             # Add the value to the fields layout
@@ -297,12 +310,25 @@ class PublishPlugin(PluginBase):
             """Return the setting resolved value"""
             return self._resolved_value
 
-        @QtCore.Slot()
+#        @QtCore.Slot()
         def update_value(self):
             """
             Handle when the template value has changed
             """
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget
+            value_widget = self.sender().sender()
+            field_name = value_widget.get_field_name()
+
+            # Ensure the signal isn't from a field widget
+            if field_name in self._field_widgets:
+                return
+
+            value = self._value
             super(PublishPlugin.TemplateSettingWidget, self).update_value()
+            if value == self._value:
+                # Bail if the value didn't actually change
+                return
 
             # Regather the fields used to resolve the template
             self.gather_fields()
@@ -316,7 +342,7 @@ class PublishPlugin(PluginBase):
             # Update the ui
             self.refresh_ui()
 
-        @QtCore.Slot()
+#        @QtCore.Slot()
         def update_field(self):
             """
             Handle when a field value has changed
@@ -332,20 +358,14 @@ class PublishPlugin(PluginBase):
 
             # If the sender is from another setting, check that the field matches
             # one of this setting's linked fields, else ignore
-            if field_widget.parent is not self and \
-                (field_name not in self._linked_fields or
-                 field_name not in self._field_widgets):
+            if field_name not in self._field_widgets or \
+                (field_widget.parent() is not self and \
+                field_name not in self._linked_fields):
                 return
 
-            # Convert any NoneStr values to real None
-            if field_value == self.NoneValue:
+            # Convert any NoneStr values or empty strings to real None
+            if field_value in (self.NoneValue, ""):
                 field_value = None
-            # Check if the user has set the value to an empty string and if so,
-            # update the widget to show the NoneStr
-            elif field_value == "":
-                field_value = None
-                self._field_widgets[field_name].set_value(self.NoneStr)
-                self._field_widgets[field_name].update()
             # Else ensure that we are casting the value to its correct type
             elif field_value != self.MultiplesValue:
                 value_type = type(field_value).__name__
@@ -361,7 +381,21 @@ class PublishPlugin(PluginBase):
                             "Unknown conversion from type '{}'' to '{}'".format(
                                 value_type, field_type))
 
-            # Update the fields dictionary with the widget value
+            # If this is coming from a linked setting, we need to update
+            # the widget as well
+            if field_widget is not self._field_widgets[field_name]:
+                signals_blocked = self._field_widgets[field_name].blockSignals(True)
+                try:
+                    if field_value == self.MultiplesValue:
+                        self._field_widgets[field_name].set_value(self.MultiplesStr)
+                    elif field_value == self.NoneValue:
+                        self._field_widgets[field_name].set_value(self.NoneStr)
+                    else:
+                        self._field_widgets[field_name].set_value(field_value)
+                finally:
+                    self._field_widgets[field_name].blockSignals(signals_blocked)
+
+            # Update the fields dictionary with the new value
             self._fields[field_name] = self._fields[field_name]._replace(
                 value=field_value, is_missing=False)
 
@@ -529,17 +563,22 @@ class PublishPlugin(PluginBase):
                 field_widget.setObjectName(field.name)
                 field_widget.setParent(self)
 
+                field_name = field.name
+                if field_name in self._linked_fields:
+                    field_name = "<font color='{}'>(linked)</font> {}".format(
+                        self.WarnColor, field_name)
+
                 # Add a row entry
-                self._fields_layout.addRow(field.name, field_widget)
+                self._fields_layout.addRow(field_name, field_widget)
                 self._field_widgets[field.name] = field_widget
 
                 # Connect the value_changed signal to the setting_changed signal so
                 # all other settings will be notified about the change
-                field_widget.value_changed.connect(self.parent.setting_changed)
+                field_widget.value_changed.connect(self.parent().setting_changed)
 
                 # Connect the setting_changed signal to the update_field slot so that
                 # this widget will update whenever any setting is changed.
-                self.parent.setting_changed.connect(self.update_field)
+                self.parent().setting_changed.connect(self.update_field)
 
 
     ############################################################################
