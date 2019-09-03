@@ -119,8 +119,6 @@ class CollectorPlugin(HookBaseClass):
         type_display = item_info["type_display"]
         icon_path    = item_info["icon_path"]
 
-        self.logger.info("Added %s of type %s" % (item_name, item_type))
-
         # create and populate the item
         item = parent_item.create_item(
             item_type,
