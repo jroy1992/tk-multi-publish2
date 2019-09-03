@@ -8,9 +8,17 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import collections
+from operator import itemgetter
+
 import sgtk
+from sgtk import TankError, TankMissingTemplateError
+from sgtk.platform.qt import QtCore, QtGui
+from sgtk.platform.validation import convert_string_to_type
 
 from .base import PluginBase
+
+HookBaseClass = sgtk.get_hook_baseclass()
 
 
 class PublishPlugin(PluginBase):
@@ -20,6 +28,558 @@ class PublishPlugin(PluginBase):
     plugin. Publish plugins define which items they will operate on as well as
     the execution logic for each phase of the publish process.
     """
+    class TabbedWidgetController(QtGui.QTabWidget):
+        """
+        Controller that creates the tabbed widgets.
+        """
+        def __init__(self, parent, hook, tasks):
+            QtGui.QTabWidget.__init__(self, parent)
+
+            # Next add the settings widget if there are settings to display
+            if hook.plugin.settings["Settings To Display"]:
+                self.settings_widget = PublishPlugin.SettingsWidgetController(parent, hook, tasks)
+                self.addTab(self.settings_widget, "Settings")
+
+            # First add the description widget
+            self.description_widget = PublishPlugin.DescriptionWidget(parent, hook)
+            self.addTab(self.description_widget, "Description")
+
+    class DescriptionWidget(QtGui.QWidget):
+        """
+        Widget to display the plugin description.
+        """
+        def __init__(self, parent, hook):
+            QtGui.QWidget.__init__(self, parent)
+
+            # The publish plugin that subclasses this will implement the
+            # `description` property. We'll use that here to display the plugin's
+            # description in a label.
+            description_label = QtGui.QLabel(hook.plugin.description)
+            description_label.setWordWrap(True)
+            description_label.setOpenExternalLinks(True)
+
+            # create the layout to use within the group box
+            description_layout = QtGui.QVBoxLayout()
+            description_layout.addWidget(description_label)
+            description_layout.addStretch()
+            self.setLayout(description_layout)
+
+    class SettingsWidgetController(QtGui.QWidget):
+        """
+        Controller that creates the widgets for each setting.
+        """
+        # Signal for when a setting value has changed
+        setting_changed = QtCore.Signal()
+
+        def __init__(self, parent, hook, tasks):
+            QtGui.QWidget.__init__(self, parent)
+            plugin = hook.plugin
+
+            self._layout = QtGui.QFormLayout(self)
+
+            # since tasks will be of same type it's safe to assume they will all
+            # share the same list of settings
+            task_settings = tasks[0].settings if tasks else {}
+
+            # TODO: these should probably be exceptions
+            for setting in plugin.settings["Settings To Display"]:
+                kwargs = setting.value
+
+                setting_name = kwargs.pop("name", None)
+                if not setting_name:
+                    plugin.logger.error(
+                        "Entry in 'Settings To Display' is missing its 'name' attribute")
+                    continue
+
+                setting = task_settings.get(setting_name)
+                if not setting:
+                    plugin.logger.error("Unknown setting: {}".format(setting_name))
+                    continue
+
+                widget_type = kwargs.pop("type", None)
+                if not widget_type:
+                    plugin.logger.error(
+                        "No defined widget type for setting: {}".format(setting_name))
+                    continue
+
+                if not hasattr(hook, widget_type):
+                    plugin.logger.error("Cannot find widget class: {}".format(widget_type))
+                    continue
+
+                # Instantiate the widget class
+                widget_class = getattr(hook, widget_type)
+                display_name = kwargs.get("display_name", setting_name)
+                setting_widget = widget_class(self, hook, tasks, setting_name, **kwargs)
+                setting_widget.setObjectName(setting_name)
+
+                # Add a row entry
+                self._layout.addRow(display_name, setting_widget)
+
+    class SettingWidgetBaseClass(PluginBase.ValueWidgetBaseClass):
+        """
+        Base Class for creating any custom settings widgets.
+        """
+        def __init__(self, parent, hook, tasks, name, **kwargs):
+
+            self._tasks = tasks
+            self._linked_settings = kwargs.pop("linked_settings", [])
+
+            # Get the list of non None, sorted values
+            values = [task.settings[name].value for task in self._tasks]
+            values = filter(lambda x: x is not None, values)
+            values.sort(reverse=True)
+
+            # Get the number of unique values
+            value_type = self._tasks[0].settings[name].type
+            if value_type == "list":
+                num_values = len(set([tuple(l) for l in values]))
+            elif value_type == "dict":
+                num_values = len(set([frozenset(d.items()) for d in values]))
+            else:
+                num_values = len(set(values))
+
+            if num_values > 1:
+                value = self.MultiplesValue
+            elif num_values < 1:
+                value = None
+            else:
+                value = values.pop()
+
+            super(PublishPlugin.SettingWidgetBaseClass, self).__init__(
+                parent, hook, name, value, value_type, **kwargs)
+
+        @property
+        def tasks(self):
+            return self._tasks
+
+    class SettingWidget(SettingWidgetBaseClass):
+        """
+        A widget class representing a generic setting.
+        """
+        # Signal for when a setting value has changed
+        value_changed = QtCore.Signal()
+
+        def __init__(self, parent, hook, tasks, name, **kwargs):
+            super(PublishPlugin.SettingWidget, self).__init__(
+                parent, hook, tasks, name, **kwargs)
+
+            self._layout = QtGui.QVBoxLayout(self)
+            self._layout.setContentsMargins(0, 5, 0, 2)
+
+            # Get the value_widget
+            self._value_widget = self.value_widget_factory(
+                self._name, self._value, self._value_type, self._editable)
+            self._value_widget.setParent(self)
+
+            # Add it to the layout
+            self._layout.addWidget(self._value_widget)
+            self._layout.addStretch()
+
+            # Connect the value_changed signal to the setting_changed signal so
+            # all other settings will be notified about the change
+            self._value_widget.value_changed.connect(parent.setting_changed)
+
+            # Connect the setting_changed signal to the update_value slot so that
+            # this widget will update whenever any setting is changed.
+            parent.setting_changed.connect(self.update_value)
+
+#        @QtCore.Slot()
+        def update_value(self):
+
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget
+            value_widget = self.sender().sender()
+            field_name = value_widget.get_field_name()
+
+            # If the signal is not from ourselves, ensure it is in the list of
+            # linked settings
+            if value_widget.parent() is not self and \
+                field_name not in self._linked_settings:
+                return
+
+            # TODO: Implement value validation before update.
+            self._value = value_widget.get_value()
+
+            # Convert any NoneStr values or empty strings to real None
+            if self._value in (self.NoneValue, ""):
+                self._value = None
+            # Else ensure that we are casting the value to its correct type
+            elif self._value != self.MultiplesValue:
+                value_type = type(self._value).__name__
+                if value_type != self._value_type:
+                    if value_type == "str":
+                        self._value = convert_string_to_type(self._value, self._value_type)
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}' to '{}'".format(
+                                value_type, self._value_type))
+
+            # If this is coming from a different widget, we need to update
+            # this widget with the value
+            if value_widget is not self._value_widget:
+                signals_blocked = self._value_widget.blockSignals(True)
+                try:
+                    if self._value == self.MultiplesValue:
+                        self._value_widget.set_value(self.MultiplesStr)
+                    elif self._value == self.NoneValue:
+                        self._value_widget.set_value(self.NoneStr)
+                    else:
+                        self._value_widget.set_value(self._value)
+                finally:
+                    self._value_widget.blockSignals(signals_blocked)
+
+            # Emit that our value has changed
+            self.value_changed.emit()
+
+            # Cache out the value
+            for task in self._tasks:
+                if self._value == self.MultiplesValue:
+                    # Skip caching the value if its a multiple
+                    continue
+                # Only overwrite valid values
+                task.settings[self._name].value = self._value
+
+    class TemplateSettingWidget(SettingWidget):
+        """
+        A widget class representing a template setting.
+        """
+        TemplateField = collections.namedtuple("TemplateField",
+            "name value type editable is_missing")
+
+        # Signal for when a setting field has changed
+        field_changed = QtCore.Signal(TemplateField)
+
+        def __init__(self, parent, hook, tasks, name, **kwargs):
+
+            self._linked_fields = kwargs.pop("linked_fields", [])
+
+            super(PublishPlugin.SettingWidget, self).__init__(
+                parent, hook, tasks, name, **kwargs)
+
+            self._fields = {}
+            self._field_widgets = {}
+            self._resolved_value = ""
+
+            self._layout = QtGui.QVBoxLayout(self)
+            self._layout.setContentsMargins(0, 6, 0, 2)
+
+            self._resolved_value_widget = QtGui.QLabel(self)
+            self._layout.addWidget(self._resolved_value_widget)
+
+            # Get the value_widget
+            self._value_widget = self.value_widget_factory(
+                self._name, self._value, self._value_type, self._editable)
+            self._value_widget.setParent(self)
+
+            # Connect the value_changed signal to the setting_changed signal so
+            # all other settings will be notified about the change
+            self._value_widget.value_changed.connect(parent.setting_changed)
+
+            # Connect the setting_changed signal to the update_value slot so that
+            # this widget will update whenever any setting is changed.
+            parent.setting_changed.connect(self.update_value)
+
+            # TODO: dump this in a collapsible widget
+            self._fields_layout = QtGui.QFormLayout()
+            self._fields_layout.setContentsMargins(0, 0, 0, 0)
+            self._fields_layout.setVerticalSpacing(1)
+            self._layout.addLayout(self._fields_layout)
+
+            # Add the value to the fields layout
+            self._fields_layout.addRow("Template Name", self._value_widget)
+
+            # Gather the fields used to resolve the template
+            self.gather_fields()
+
+            # Calculate the resolved template value
+            self.resolve_template_value()
+
+            # Cache the data
+            self.cache_data()
+
+            # Update the ui
+            self.refresh_ui()
+
+        @property
+        def fields(self):
+            """Return the setting fields"""
+            return self._fields
+
+        @property
+        def resolved_value(self):
+            """Return the setting resolved value"""
+            return self._resolved_value
+
+#        @QtCore.Slot()
+        def update_value(self):
+            """
+            Handle when the template value has changed
+            """
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget
+            value_widget = self.sender().sender()
+            field_name = value_widget.get_field_name()
+
+            # Ensure the signal isn't from a field widget
+            if field_name in self._field_widgets:
+                return
+
+            value = self._value
+            super(PublishPlugin.TemplateSettingWidget, self).update_value()
+            if value == self._value:
+                # Bail if the value didn't actually change
+                return
+
+            # Regather the fields used to resolve the template
+            self.gather_fields()
+
+            # Recalculate the resolved template value
+            self.resolve_template_value()
+
+            # Recache the data
+            self.cache_data()
+
+            # Update the ui
+            self.refresh_ui()
+
+#        @QtCore.Slot()
+        def update_field(self):
+            """
+            Handle when a field value has changed
+            """
+            do_full_refresh = False
+
+            # The sender is the controller widget, which received its signal
+            # from a SettingsWidget value_widget/field_widget
+            field_widget = self.sender().sender()
+
+            field_name = field_widget.get_field_name()
+            field_value = field_widget.get_value()
+
+            # If the sender is from another setting, check that the field matches
+            # one of this setting's linked fields, else ignore
+            if field_name not in self._field_widgets or \
+                (field_widget.parent() is not self and \
+                field_name not in self._linked_fields):
+                return
+
+            # Convert any NoneStr values or empty strings to real None
+            if field_value in (self.NoneValue, ""):
+                field_value = None
+            # Else ensure that we are casting the value to its correct type
+            elif field_value != self.MultiplesValue:
+                value_type = type(field_value).__name__
+                field_type = self._fields[field_name].type
+                if value_type != field_type:
+                    if value_type == "str":
+                        field_value = convert_string_to_type(field_value, field_type)
+                        # Need to replace the field widget for this guy, so do a
+                        # full refresh
+                        do_full_refresh = True
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}'' to '{}'".format(
+                                value_type, field_type))
+
+            # If this is coming from a linked setting, we need to update
+            # the widget as well
+            if field_widget is not self._field_widgets[field_name]:
+                signals_blocked = self._field_widgets[field_name].blockSignals(True)
+                try:
+                    if field_value == self.MultiplesValue:
+                        self._field_widgets[field_name].set_value(self.MultiplesStr)
+                    elif field_value == self.NoneValue:
+                        self._field_widgets[field_name].set_value(self.NoneStr)
+                    else:
+                        self._field_widgets[field_name].set_value(field_value)
+                finally:
+                    self._field_widgets[field_name].blockSignals(signals_blocked)
+
+            # Update the fields dictionary with the new value
+            self._fields[field_name] = self._fields[field_name]._replace(
+                value=field_value, is_missing=False)
+
+            # Emit that our field value has changed
+            self.field_changed.emit(self._fields[field_name])
+
+            # Recalculate the resolved template value
+            self.resolve_template_value()
+
+            # Recache the data
+            self.cache_data()
+
+            # Update the ui
+            if do_full_refresh:
+                self.refresh_ui()
+            else:
+                self._resolved_value_widget.setText(self._resolved_value)
+
+        def gather_fields(self):
+            """
+            Gather the list of template fields
+            """
+            publisher = self._hook.parent
+
+            # Gather the fields for every input task
+            fields = {}
+            for task in self._tasks:
+                value = task.settings[self._name].value
+                if value is None:
+                    continue
+
+                tmpl = publisher.get_template_by_name(value)
+                if not tmpl:
+                    # this template was not found in the template config!
+                    raise TankMissingTemplateError(
+                        "The Template '%s' does not exist!" % value)
+
+                # Get the list of fields specific to this template
+                tmpl_keys = tmpl.keys.keys()
+
+                # First get the fields from the context
+                # We always recalculate this because the context may have changed
+                # since the last time the cache was updated.
+                try:
+                    context_fields = task.item.context.as_template_fields(tmpl)
+                except TankError:
+                    self._hook.plugin.logger.error(
+                        "Unable to get context fields for template: %s", value)
+                else:
+                    for k, v in context_fields.iteritems():
+                        if k not in tmpl_keys:
+                            continue
+                        if k in fields:
+                            if fields[k].value != v:
+                                fields[k] = fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=False)
+                        else:
+                            fields[k] = self.TemplateField(
+                                k, v, "str", editable=False, is_missing=False)
+
+                # Next get any cached fields
+                if "fields" in task.settings[self._name].extra:
+                    for k, v in task.settings[self._name].extra["fields"].iteritems():
+                        if k not in tmpl_keys:
+                            continue
+                        if k in fields:
+                            if fields[k].value != v.value:
+                                fields[k] = fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=False)
+                        else:
+                            fields[k] = v
+
+                # Next get the list of missing fields
+                tmpl_fields = dict([(k, v.value) for k, v in fields.iteritems()])
+                missing_keys = tmpl.missing_keys(tmpl_fields, True)
+                for k in missing_keys:
+                    if k in fields:
+                        if fields[k].value is not None:
+                            fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=True)
+                    else:
+                        fields[k] = self.TemplateField(
+                            k, None, "str", editable=True, is_missing=True)
+
+            # Now pickup any overridden values already set via the UI
+            for field in fields.iterkeys():
+                if field in self._fields:
+                    fields[field] = self._fields[field]
+
+            # Now update the member dict
+            self._fields = fields
+
+        def resolve_template_value(self):
+            """
+            Resolve the template value
+            """
+            publisher = self._hook.parent
+
+            # Reset the value
+            self._resolved_value = ""
+
+            # If no template defined or not all are the same, just bail
+            if self._value is None:
+                self._resolved_value = self.NoneStr
+                return
+            elif self._value == self.MultiplesValue:
+                self._resolved_value = self.MultiplesStr
+                return
+
+            # If we are missing any keys, let the user know so they can fill them in.
+            if any([f.is_missing for f in self._fields.itervalues()]):
+                self._resolved_value = "Cannot resolve template. Missing field values!"
+                return
+
+            tmpl = publisher.get_template_by_name(self._value)
+            if not tmpl:
+                # this template was not found in the template config!
+                raise TankMissingTemplateError(
+                    "The Template '%s' does not exist!" % self._value)
+
+            # Create the flattened list of fields to apply
+            fields = {}
+            ignore_types = []
+            for field in self._fields.itervalues():
+                if field.value == self.MultiplesValue:
+                    fields[field.name] = "{%s}" % field.name
+                    ignore_types.append(field.name)
+                else:
+                    fields[field.name] = field.value
+
+            # Apply fields to template
+            self._resolved_value = tmpl.apply_fields(fields, ignore_types=ignore_types)
+
+        def cache_data(self):
+            """Store persistent data on the settings object"""
+            for task in self._tasks:
+                # Store the resolved value in the "extra" section of the settings obj
+                task.settings[self._name].extra["resolved_value"] = self._resolved_value
+
+                # Store the field values in the "extra" section of the settings obj
+                if "fields" not in task.settings[self._name].extra:
+                    task.settings[self._name].extra["fields"] = {}
+                for name, field in self._fields.iteritems():
+                    if field.value == self.MultiplesValue:
+                        # Don't override value with multiples key
+                        continue
+                    task.settings[self._name].extra["fields"][name] = field
+
+        def refresh_ui(self):
+            """Update the UI"""
+            self._resolved_value_widget.setText(self._resolved_value)
+
+            # Clear the list of fields, excluding the template name
+            for i in reversed(range(self._fields_layout.count())[2:]):
+                field_widget = self._fields_layout.itemAt(i).widget()
+                self._fields_layout.removeWidget(field_widget)
+                field_widget.deleteLater()
+
+            # And repopulate it
+            self._field_widgets = {}
+            for field in sorted(self._fields.itervalues(), key=itemgetter(2, 3, 0)):
+                # Create the field widget
+                field_widget = self.value_widget_factory(
+                    field.name, field.value, field.type, field.editable)
+                field_widget.setObjectName(field.name)
+                field_widget.setParent(self)
+
+                field_name = field.name
+                if field_name in self._linked_fields:
+                    field_name = "<font color='{}'>(linked)</font> {}".format(
+                        self.WarnColor, field_name)
+
+                # Add a row entry
+                self._fields_layout.addRow(field_name, field_widget)
+                self._field_widgets[field.name] = field_widget
+
+                # Connect the value_changed signal to the setting_changed signal so
+                # all other settings will be notified about the change
+                field_widget.value_changed.connect(self.parent().setting_changed)
+
+                # Connect the setting_changed signal to the update_field slot so that
+                # this widget will update whenever any setting is changed.
+                self.parent().setting_changed.connect(self.update_field)
+
 
     ############################################################################
     # Plugin properties
@@ -202,6 +762,19 @@ class PublishPlugin(PluginBase):
                 "description": (
                     "A dict of plugin settings keyed by item type. Each entry in the dict "
                     "is itself a dict in which each item is the plugin attribute name and value."
+                ),
+            },
+            "Settings To Display": {
+                "type": "list",
+                "values": {
+                    "type": "dict"
+                },
+                "default_value": [],
+                "allows_empty": True,
+                "description": (
+                    "A list of settings to display in the UI. Each entry in the list is a dict "
+                    "that defines the associated setting name, the widget class to use, as well "
+                    "as any keyword arguments to pass to the constructor."
                 ),
             }
         }
@@ -493,40 +1066,22 @@ class PublishPlugin(PluginBase):
     # allows clients to write their own publish plugins while deferring custom
     # UI settings implementations until needed.
 
-    def create_settings_widget(self, parent, item):
+    def create_settings_widget(self, parent, tasks):
         """
         Creates a Qt widget, for the supplied parent widget (a container widget
         on the right side of the publish UI).
 
         :param parent: The parent to use for the widget being created
-        :param item: Item for the settings widget is being created
+        :param tasks: List of tasks to create the settings widget for.
         :return: A QtGui.QWidget or subclass that displays information about
             the plugin and/or editable widgets for modifying the plugin's
             settings.
         """
-
-        # defer Qt-related imports
-        from sgtk.platform.qt import QtGui
-
-        # create a group box to display the description
-        description_group_box = QtGui.QGroupBox(parent)
-        description_group_box.setTitle("Description:")
-
-        # The publish plugin that subclasses this will implement the
-        # `description` property. We'll use that here to display the plugin's
-        # description in a label.
-        description_label = QtGui.QLabel(self.description)
-        description_label.setWordWrap(True)
-        description_label.setOpenExternalLinks(True)
-
-        # create the layout to use within the group box
-        description_layout = QtGui.QVBoxLayout()
-        description_layout.addWidget(description_label)
-        description_layout.addStretch()
-        description_group_box.setLayout(description_layout)
+        # Give the control to TabWidgetController to manage creation of settings to display.
+        tab_widget = self.TabbedWidgetController(parent, self, tasks)
 
         # return the description group box as the widget to display
-        return description_group_box
+        return tab_widget
 
     def get_ui_settings(self, widget):
         """
@@ -536,7 +1091,7 @@ class PublishPlugin(PluginBase):
         The widget argument is the widget that was previously created by
         `create_settings_widget`.
 
-        The method returns an dictionary, where the key is the name of a
+        The method returns a dictionary, where the key is the name of a
         setting that should be updated and the value is the new value of that
         setting. Note that it is not necessary to return all the values from
         the UI. This is to allow the publisher to update a subset of settings
@@ -573,7 +1128,7 @@ class PublishPlugin(PluginBase):
 
             settings = [
             {
-                 "seeting_a": "/path/to/a/file"
+                 "setting_a": "/path/to/a/file"
                  "setting_b": False
             },
             {
