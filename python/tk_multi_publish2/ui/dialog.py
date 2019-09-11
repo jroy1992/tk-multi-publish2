@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'dialog.ui'
 #
-#      by: pyside-uic 0.2.15 running on PySide 1.2.2
+#      by: pyside-uic 0.2.15 running on PySide 1.2.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -183,6 +183,8 @@ class Ui_Dialog(object):
         self.verticalLayout_5.setObjectName("verticalLayout_5")
         self.details_stack = QtGui.QStackedWidget(self.details_frame)
         self.details_stack.setObjectName("details_stack")
+        self.details_item_tab = QtGui.QTabWidget()
+        self.details_item_tab.setObjectName("details_item_tab")
         self.details_item = QtGui.QWidget()
         self.details_item.setObjectName("details_item")
         self.verticalLayout_6 = QtGui.QVBoxLayout(self.details_item)
@@ -268,7 +270,7 @@ class Ui_Dialog(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setObjectName("scrollArea")
         self.scrollAreaWidgetContents = QtGui.QWidget()
-        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 408, 102))
+        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 412, 95))
         self.scrollAreaWidgetContents.setObjectName("scrollAreaWidgetContents")
         self.verticalLayout_10 = QtGui.QVBoxLayout(self.scrollAreaWidgetContents)
         self.verticalLayout_10.setSpacing(0)
@@ -306,7 +308,8 @@ class Ui_Dialog(object):
         self.verticalLayout_6.setStretch(5, 5)
         self.verticalLayout_6.setStretch(6, 1)
         self.verticalLayout_6.setStretch(7, 5)
-        self.details_stack.addWidget(self.details_item)
+        self.details_item_tab.addTab(self.details_item, "")
+        self.details_stack.addWidget(self.details_item_tab)
         self.details_task = QtGui.QWidget()
         self.details_task.setObjectName("details_task")
         self.verticalLayout_11 = QtGui.QVBoxLayout(self.details_task)
@@ -335,7 +338,7 @@ class Ui_Dialog(object):
         self.task_settings_scroll_area.setWidgetResizable(True)
         self.task_settings_scroll_area.setObjectName("task_settings_scroll_area")
         self.task_settings_parent = QtGui.QWidget()
-        self.task_settings_parent.setGeometry(QtCore.QRect(0, 0, 408, 432))
+        self.task_settings_parent.setGeometry(QtCore.QRect(0, 0, 416, 442))
         self.task_settings_parent.setObjectName("task_settings_parent")
         self.verticalLayout_13 = QtGui.QVBoxLayout(self.task_settings_parent)
         self.verticalLayout_13.setSpacing(-1)
@@ -530,8 +533,9 @@ class Ui_Dialog(object):
         self.item_thumbnail.setToolTip(QtGui.QApplication.translate("Dialog", "Click to take a screenshot.", None, QtGui.QApplication.UnicodeUTF8))
         self.item_summary_label.setText(QtGui.QApplication.translate("Dialog", "Summary:", None, QtGui.QApplication.UnicodeUTF8))
         self.item_settings_label.setText(QtGui.QApplication.translate("Dialog", "Settings:", None, QtGui.QApplication.UnicodeUTF8))
+        self.details_item_tab.setTabText(self.details_item_tab.indexOf(self.details_item), QtGui.QApplication.translate("Dialog", "Details", None, QtGui.QApplication.UnicodeUTF8))
         self.task_name.setText(QtGui.QApplication.translate("Dialog", "Task Name", None, QtGui.QApplication.UnicodeUTF8))
-        self.please_select_an_item.setText(QtGui.QApplication.translate("Dialog", "Please select tasks of the same type or a single item.", None, QtGui.QApplication.UnicodeUTF8))
+        self.please_select_an_item.setText(QtGui.QApplication.translate("Dialog", "Please select tasks of the same type or items.", None, QtGui.QApplication.UnicodeUTF8))
         self.label_2.setText(QtGui.QApplication.translate("Dialog", "Multiple selection not supported on tasks of this type.\n"
 "Please select a single task.", None, QtGui.QApplication.UnicodeUTF8))
         self.browse.setToolTip(QtGui.QApplication.translate("Dialog", "<p>Click this button to browse files for publishing. You can also click and hold the button to show the full browsing menu which includes an option to browse folders to publish image sequences.</p>", None, QtGui.QApplication.UnicodeUTF8))
