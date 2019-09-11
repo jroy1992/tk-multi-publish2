@@ -244,7 +244,7 @@ class PublishPlugin(PluginBase):
         A widget class representing a template setting.
         """
         TemplateField = collections.namedtuple("TemplateField",
-            "name value type editable is_missing")
+                                               "name value type editable is_missing")
 
         # Signal for when a setting field has changed
         field_changed = QtCore.Signal(TemplateField)
