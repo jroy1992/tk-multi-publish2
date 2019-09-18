@@ -49,6 +49,15 @@ configuration:
            identification, publish display name, image sequence paths, etc."
         default_value: "{self}/path_info.py"
 
+    task_generator:
+        type: hook
+        description:
+          "A hook that defines a custom task generator method used during the
+          validation, publish, and finalization steps to yield the list of items
+          in the publish tree to process."
+        default_value: "{self}/task_generator.py"
+        parameters: [publish_tree, item_filters, task_filters, publish_logger]
+
     publish_plugins:
         type: list
         description: "List of publish plugins."

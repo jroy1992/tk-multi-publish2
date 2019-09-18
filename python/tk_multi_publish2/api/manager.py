@@ -8,6 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import traceback
 import sgtk
 
 from .tree import PublishTree
@@ -233,7 +234,17 @@ class PublishManager(object):
         :ref:`publish-api-tree` with the deserialized contents stored in the
         supplied file.
         """
-        self._tree = PublishTree.load_file(path)
+        self._tree = PublishTree.load_file(path, self._logger)
+
+    def load_dict(self, tree_dict):
+        """
+        Load an already deserialized publish tree dictionary.
+
+        This is a convenience method that replaces the manager's underlying
+        :ref:`publish-api-tree` with the deserialized contents stored in the
+        supplied dictionary.
+        """
+        self._tree = PublishTree.from_dict(tree_dict, self._logger)
 
     def save(self, path):
         """
@@ -241,22 +252,86 @@ class PublishManager(object):
         """
         self._tree.save_file(path)
 
+    def run(self, task_generator=None):
+        """
+        Process the gathered items in the publish tree.
+
+        :param task_generator: A generator of :class:`~PublishTask` instances.
+
+        :returns: `True` if success, `False` otherwise.
+        """
+        # Run all steps.
+        self._logger.info("Starting Publish!")
+
+        # First check that we have items to process
+        # Subtract to account for root node
+        num_items = len(list(self._tree)) - 1
+        if num_items < 1:
+            self._logger.error("Nothing to process! Exiting...")
+            return True
+
+        # is the app configured to execute the validation when publish
+        # is triggered?
+        if self._bundle.get_setting("validate_on_publish"):
+            self._logger.info("Running validation pass")
+            try:
+                failed_to_validate = self.validate(task_generator)
+                num_issues = len(failed_to_validate)
+            finally:
+                if num_issues > 0:
+                    self._logger.error(
+                        "Validation Complete. %d issues reported. " \
+                        "Not proceeding with publish." % num_issues
+                    )
+                    return False
+                else:
+                    self._logger.info("Validation Complete. All checks passed.")
+        else:
+            self._logger.info("'validate_on_publish' is False. Skipping validation pass.")
+
+        self._logger.info("Running publishing pass")
+        try:
+            self.publish(task_generator)
+        except Exception:
+            self._logger.error("Error while publishing. Aborting.")
+            # ensure the full error shows up in the log file
+            self._logger.error("Publish error stack:\n%s" % (traceback.format_exc(),))
+            return False
+        self._logger.info("Publishing pass Complete.")
+
+        self._logger.info("Running finalize pass")
+        try:
+            self.finalize(task_generator)
+        except Exception:
+            self._logger.error("Error while finalizing. Aborting.")
+            # ensure the full error shows up in the log file
+            self._logger.error("Finalize error stack:\n%s" % (traceback.format_exc(),))
+            return False
+        self._logger.info("Finalize pass Complete.")
+
+        self._logger.info("Publish Complete!")
+        return True
+
     def _process_tasks(self, task_generator, task_cb):
         """
         Processes tasks returned by the generator and invokes the passed in
         callback on each. The result of the task callback will be forwarded back
         to the generator.
 
-        :param task_genrator: Iterator on task to process.
+        :param task_generator: Iterator on task to process.
         :param task_cb: Callable that will process a task.
             The signature is
             def task_cb(task):
                 ...
         """
         # calling code can supply its own generator for tasks to process. if not
-        # supplied, we'll use our own generator.
+        # supplied, we'll use the app setting generator.
         if not task_generator:
-            task_generator = self._task_generator()
+            task_generator = self._bundle.execute_hook(
+                "task_generator",
+                publish_tree=self._tree,
+                publish_logger=self._logger
+            )
 
         # get the first task
         task = None
@@ -547,37 +622,3 @@ class PublishManager(object):
 
         # no existing, persistent item was collected with this path
         return False
-
-    def _task_generator(self):
-        """
-        This method generates all active tasks for all active items in the
-        publish tree and yields them to the caller.
-
-        This is the default task generator used by validate, publish, and
-        finalize if no custom task generator is supplied.
-        """
-
-        self.logger.debug("Iterating over tasks...")
-        for item in self.tree:
-
-            if not item.active:
-                logger.debug(
-                    "Skipping item '%s' because it is inactive" % (item,))
-                continue
-
-            if not item.tasks:
-                logger.debug(
-                    "Skipping item '%s' because it has no tasks attached." %
-                    (item,)
-                )
-                continue
-
-            logger.debug("Processing item: %s" % (item,))
-            for task in item.tasks:
-
-                if not task.active:
-                    logger.debug("Skipping inactive task: %s" % (task,))
-                    continue
-
-                status = (yield task)
-                logger.debug("Task %s status: %s" % (task, status))
