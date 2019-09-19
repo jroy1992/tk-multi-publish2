@@ -748,6 +748,12 @@ class AppDialog(QtGui.QWidget):
             self.ui.item_summary.setText(summary_text)
             self.ui.item_type.setText("%d items to execute" % len(tree_items))
 
+        # run create properties widget
+        widget = self._publish_manager._collector_instance.run_create_properties_widget(
+            self.ui.property_settings_parent,
+            items
+        )
+        self.ui.property_settings.widget = widget
         # skip settings for now
         ## render settings
         #self.ui.item_settings.set_static_data(
