@@ -8,10 +8,13 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import sgtk
+import collections
+from operator import itemgetter
+
 from sgtk.platform.qt import QtCore, QtGui
 from sgtk.platform.validation import convert_string_to_type
 
+from sgtk import TankError, TankMissingTemplateError
 from .base import PluginBase
 
 
@@ -45,9 +48,20 @@ class CollectorPlugin(PluginBase):
                         "Entry in 'Properties To Display' is missing its 'name' attribute")
                     continue
 
+                widget_type = kwargs.pop("type", None)
+                if not widget_type:
+                    plugin.logger.error(
+                        "No defined widget type for setting: {}".format(name))
+                    continue
+
+                if not hasattr(hook, widget_type):
+                    plugin.logger.error("Cannot find widget class: {}".format(widget_type))
+                    continue
+
                 # Instantiate the widget class
+                widget_class = getattr(hook, widget_type)
                 display_name = kwargs.get("display_name", name)
-                property_widget = CollectorPlugin.PropertyWidget(self, hook, items, name, **kwargs)
+                property_widget = widget_class(self, hook, items, name, **kwargs)
                 property_widget.setObjectName(name)
 
                 # Add a row entry
@@ -65,7 +79,7 @@ class CollectorPlugin(PluginBase):
             self._items = items
 
             # Get the list of non None, sorted values
-            values = [items.properties.get(name) for item in self._items]
+            values = [item.properties.get(name) for item in self._items]
             values = filter(lambda x: x is not None, values)
             values.sort(reverse=True)
 
@@ -159,6 +173,363 @@ class CollectorPlugin(PluginBase):
         def items(self):
             return self._items
 
+    class FieldsWidget(PropertyWidget):
+        """
+        A widget class representing a template setting.
+        """
+        TemplateField = collections.namedtuple("TemplateField",
+                                               "name value type editable is_missing")
+
+        # Signal for when a setting field has changed
+        field_changed = QtCore.Signal(TemplateField)
+
+        def __init__(self, parent, hook, items, name, **kwargs):
+
+            super(CollectorPlugin.FieldsWidget, self).__init__(
+                parent, hook, items, name, **kwargs)
+
+            self._fields = {}
+            self._field_widgets = {}
+            self._resolved_value = ""
+
+            # by default we will assume that this widget can utilise template type task settings
+            # this will be used to get the template names, to derive the missing keys and context fields for an item
+            self._template_source_setting_name = kwargs.pop("template_source_setting_name", "publish_path_template")
+
+            # TODO: dump this in a collapsible widget
+            self._resolved_value_widget = QtGui.QLabel(self)
+            self._layout.addWidget(self._resolved_value_widget)
+
+            relevant_task_settings = [task.settings[setting] for task in items[0]._tasks for setting in task.settings
+                                      if self._template_source_setting_name in task.settings[setting].name]
+            # Get the value_widget
+            self._value_widget = self.value_widget_factory(
+                self._template_source_setting_name, self._value, self._value_type, self._editable)
+            self._value_widget.setParent(self)
+
+            # Connect the value_changed signal to the property_changed signal so
+            # all other properties will be notified about the change
+            self._value_widget.value_changed.connect(parent.property_changed)
+
+            # Connect the property_changed signal to the update_value slot so that
+            # this widget will update whenever any property is changed.
+            parent.property_changed.connect(self.update_value)
+
+            # TODO: dump this in a collapsible widget
+            self._fields_layout = QtGui.QFormLayout()
+            self._fields_layout.setContentsMargins(0, 0, 0, 0)
+            self._fields_layout.setVerticalSpacing(1)
+            self._layout.addLayout(self._fields_layout)
+
+            # Add the value to the fields layout
+            self._fields_layout.addRow("Template Name", self._value_widget)
+
+            # Gather the fields used to resolve the template
+            self.gather_fields()
+
+            # Calculate the resolved template value
+            # self.resolve_template_value()
+
+            # Cache the data
+            self.cache_data()
+
+            # Update the ui
+            self.refresh_ui()
+
+        @property
+        def fields(self):
+            """Return the property fields"""
+            return self._fields
+
+        @property
+        def resolved_value(self):
+            """Return the property resolved value"""
+            return self._resolved_value
+
+        def update_value(self):
+            """
+            Handle when the template value has changed
+            """
+            # The sender is the controller widget, which received its signal
+            # from a PropertyWidget value_widget
+            value_widget = self.sender().sender()
+            field_name = value_widget.get_field_name()
+
+            # Ensure the signal isn't from a field widget
+            if field_name in self._field_widgets:
+                return
+
+            value = self._value
+            super(CollectorPlugin.FieldsWidget, self).update_value()
+            if value == self._value:
+                # Bail if the value didn't actually change
+                return
+
+            # Regather the fields used to resolve the template
+            self.gather_fields()
+
+            # Recalculate the resolved template value
+            # self.resolve_template_value()
+
+            # Recache the data
+            self.cache_data()
+
+            # Update the ui
+            self.refresh_ui()
+
+        def update_field(self):
+            """
+            Handle when a field value has changed
+            """
+            do_full_refresh = False
+
+            # The sender is the controller widget, which received its signal
+            # from a PropertyWidget value_widget/field_widget
+            field_widget = self.sender().sender()
+
+            field_name = field_widget.get_field_name()
+            field_value = field_widget.get_value()
+
+            # If the sender is from another property, check that the field matches
+            # one of this property's linked fields, else ignore
+            if field_name not in self._field_widgets or field_widget.parent() is not self:
+                return
+
+            # Convert any NoneStr values or empty strings to real None
+            if field_value in (self.NoneValue, ""):
+                field_value = None
+            # Else ensure that we are casting the value to its correct type
+            elif field_value != self.MultiplesValue:
+                value_type = type(field_value).__name__
+                field_type = self._fields[field_name].type
+                if value_type != field_type:
+                    if value_type == "str":
+                        field_value = convert_string_to_type(field_value, field_type)
+                        # Need to replace the field widget for this guy, so do a
+                        # full refresh
+                        do_full_refresh = True
+                    else:
+                        raise TypeError(
+                            "Unknown conversion from type '{}'' to '{}'".format(
+                                value_type, field_type))
+
+            # If this is coming from a linked property, we need to update
+            # the widget as well
+            if field_widget is not self._field_widgets[field_name]:
+                signals_blocked = self._field_widgets[field_name].blockSignals(True)
+                try:
+                    if field_value == self.MultiplesValue:
+                        self._field_widgets[field_name].set_value(self.MultiplesStr)
+                    elif field_value == self.NoneValue:
+                        self._field_widgets[field_name].set_value(self.NoneStr)
+                    else:
+                        self._field_widgets[field_name].set_value(field_value)
+                finally:
+                    self._field_widgets[field_name].blockSignals(signals_blocked)
+
+            # Update the fields dictionary with the new value
+            self._fields[field_name] = self._fields[field_name]._replace(
+                value=field_value, is_missing=False)
+
+            # Emit that our field value has changed
+            self.field_changed.emit(self._fields[field_name])
+
+            # Recalculate the resolved template value
+            # self.resolve_template_value()
+
+            # Recache the data
+            self.cache_data()
+
+            # Update the ui
+            if do_full_refresh:
+                self.refresh_ui()
+            # else:
+            #     self._resolved_value_widget.setText(self._resolved_value)
+
+        def gather_fields(self):
+            """
+            Gather the list of template fields
+            """
+            publisher = self._hook.parent
+
+            # Gather the fields for every input task
+            fields = {}
+            for item in self._items:
+                relevant_task_settings = [task.settings[setting] for task in item._tasks for setting in task.settings
+                                          if self._template_source_setting_name in task.settings[setting].name]
+
+                if len(relevant_task_settings) != 1:
+                    # we assume that all the fields relevant to the item will be present in only one setting name.
+                    continue
+                else:
+                    setting = relevant_task_settings[0]
+                    value = setting.value
+                    if value is None:
+                        continue
+
+                    tmpl = publisher.get_template_by_name(value)
+                    if not tmpl:
+                        # this template was not found in the template config!
+                        raise TankMissingTemplateError(
+                            "The Template '%s' does not exist!" % value)
+
+                    # Get the list of fields specific to this template
+                    tmpl_keys = tmpl.keys.keys()
+
+                    # First get the fields from the context
+                    # We always recalculate this because the context may have changed
+                    # since the last time the cache was updated.
+                    try:
+                        context_fields = item.context.as_template_fields(tmpl)
+                    except TankError:
+                        self._hook.plugin.logger.error(
+                            "Unable to get context fields for template: %s", value)
+                    else:
+                        for k, v in context_fields.iteritems():
+                            if k not in tmpl_keys:
+                                continue
+                            if k in fields:
+                                if fields[k].value != v:
+                                    fields[k] = fields[k]._replace(
+                                        value=self.MultiplesValue, is_missing=False)
+                            else:
+                                fields[k] = self.TemplateField(
+                                    k, v, "str", editable=False, is_missing=False)
+
+                    # Next get any cached fields
+                    if "fields" in setting.extra:
+                        for k, v in setting.extra["fields"].iteritems():
+                            if k not in tmpl_keys:
+                                continue
+                            if k in fields:
+                                if fields[k].value != v.value:
+                                    fields[k] = fields[k]._replace(
+                                        value=self.MultiplesValue, is_missing=False)
+                            else:
+                                fields[k] = v
+
+                    # Next get the list of missing fields
+                    tmpl_fields = dict([(k, v.value) for k, v in fields.iteritems()])
+                    missing_keys = tmpl.missing_keys(tmpl_fields, True)
+                    for k in missing_keys:
+                        if k in fields:
+                            if fields[k].value is not None:
+                                fields[k]._replace(
+                                    value=self.MultiplesValue, is_missing=True)
+                        else:
+                            fields[k] = self.TemplateField(
+                                k, None, "str", editable=True, is_missing=True)
+
+                # Now pickup any overridden values already set via the UI
+                for field in fields.iterkeys():
+                    if field in self._fields:
+                        fields[field] = self._fields[field]
+
+            # Now update the member dict
+            self._fields = fields
+
+        def resolve_template_value(self):
+            """
+            Resolve the template value
+            """
+            publisher = self._hook.parent
+
+            # Reset the value
+            self._resolved_value = ""
+
+            # If no template defined or not all are the same, just bail
+            if self._value is None:
+                self._resolved_value = self.NoneStr
+                return
+            elif self._value == self.MultiplesValue:
+                self._resolved_value = self.MultiplesStr
+                return
+
+            # If we are missing any keys, let the user know so they can fill them in.
+            if any([f.is_missing for f in self._fields.itervalues()]):
+                self._resolved_value = "Cannot resolve template. Missing field values!"
+                return
+
+            tmpl = publisher.get_template_by_name(self._value)
+            if not tmpl:
+                # this template was not found in the template config!
+                raise TankMissingTemplateError(
+                    "The Template '%s' does not exist!" % self._value)
+
+            # Create the flattened list of fields to apply
+            fields = {}
+            ignore_types = []
+            for field in self._fields.itervalues():
+                if field.value == self.MultiplesValue:
+                    fields[field.name] = "{%s}" % field.name
+                    ignore_types.append(field.name)
+                else:
+                    fields[field.name] = field.value
+
+            # Apply fields to template
+            self._resolved_value = tmpl.apply_fields(fields, ignore_types=ignore_types)
+
+        def cache_data(self):
+            """Store persistent data on the settings object"""
+            for item in self._items:
+                for name, field in self._fields.iteritems():
+                    if field.value == self.MultiplesValue or not field.editable:
+                        # Don't override value with multiples key,
+                        # or even keys that are not editable.
+                        continue
+                    # update the item.properties.fields
+                    item.properties[self._name][name] = field.value
+
+                # settings update doesn't happen in init_task_settings, coz it returns a new settings object :\
+                for task in item._tasks:
+                    # Initialize the fields dictionary for any template settings
+                    for setting in task.settings.itervalues():
+                        if setting.type == "template":
+                            setting.extra.setdefault("fields", {})
+
+                            # Add in any relevant keys stored on the item
+                            for k, v in item.properties.get("fields", {}).iteritems():
+                                setting.extra["fields"][k] = \
+                                    self.TemplateField(k, v, "str", editable=True, is_missing=False)
+
+                            # Add in the version key if applicable
+                            setting.extra["fields"]["version"] = \
+                                self.TemplateField("version", item.properties.fields["version"],
+                                                   "str", editable=True, is_missing=False)
+
+        def refresh_ui(self):
+            """Update the UI"""
+            # self._resolved_value_widget.setText(self._resolved_value)
+
+            # Clear the list of fields, excluding the template name
+            for i in reversed(range(self._fields_layout.count())[2:]):
+                field_widget = self._fields_layout.itemAt(i).widget()
+                self._fields_layout.removeWidget(field_widget)
+                field_widget.deleteLater()
+
+            # And repopulate it
+            self._field_widgets = {}
+            for field in sorted(self._fields.itervalues(), key=itemgetter(2, 3, 0)):
+                # Create the field widget
+                field_widget = self.value_widget_factory(
+                    field.name, field.value, field.type, field.editable)
+                field_widget.setObjectName(field.name)
+                field_widget.setParent(self)
+
+                field_name = field.name
+
+                # Add a row entry
+                self._fields_layout.addRow(field_name, field_widget)
+                self._field_widgets[field.name] = field_widget
+
+                # Connect the value_changed signal to the property_changed signal so
+                # all other properties will be notified about the change
+                field_widget.value_changed.connect(self.parent().property_changed)
+
+                # Connect the property_changed signal to the update_field slot so that
+                # this widget will update whenever any property is changed.
+                self.parent().property_changed.connect(self.update_field)
+
     ############################################################################
     # Collector properties
 
@@ -237,6 +608,27 @@ class CollectorPlugin(PluginBase):
                     "Dictionary of item types that the collector will attempt to "
                     "match and create instances of."
                 )
+            },
+            "Properties To Display": {
+                "type": "list",
+                "values": {
+                    "type": "dict"
+                },
+                "default_value": [
+                    {
+                        "name": "fields",
+                        "display_name": "Item Fields",
+                        "editable": False,
+                        "template_source_setting_name": "publish_path_template",
+                        "type": "FieldsWidget"
+                    },
+                ],
+                "allows_empty": True,
+                "description": (
+                    "A list of properties to display in the UI. Each entry in the list is a dict "
+                    "that defines the associated property name, the widget class to use, as well "
+                    "as any keyword arguments to pass to the constructor."
+                ),
             }
         }
 
@@ -306,6 +698,29 @@ class CollectorPlugin(PluginBase):
             collect child items for.
         """
         raise NotImplementedError
+
+    def create_properties_widget(self, parent, items):
+        """
+        Creates a Qt widget, for the supplied parent widget (a container widget
+        that is used to display Item Details).
+
+        :param parent: The parent to use for the widget being created.
+        :param items: List of items to create the Settings tab for.
+        :return: A QtGui.QWidget or subclass that displays information about
+            the item and/or editable widgets for modifying the item's
+            properties.
+        """
+
+        if not len(self.plugin.settings["Properties To Display"].value):
+            no_properties_to_display = QtGui.QLabel(parent)
+            no_properties_to_display.setAlignment(QtCore.Qt.AlignCenter)
+            no_properties_to_display.setObjectName("no_properties_to_display")
+            no_properties_to_display.setText("No Properties to display for the selected items.")
+            widget = no_properties_to_display
+        else:
+            widget = CollectorPlugin.PropertiesWidgetController(parent, self, items)
+
+        return widget
 
 
     def process_file(self, settings, parent_item, path):

@@ -93,6 +93,30 @@ class CollectorPluginInstance(PluginInstanceBase):
                 from sgtk.platform.qt import QtCore
                 QtCore.QCoreApplication.processEvents()
 
+    def run_create_properties_widget(self, parent, items):
+        """
+        Creates a custom widget to edit an item's properties.
+
+        .. note:: This method is a no-op if running without a UI present
+
+        :param parent: Parent widget
+        :type parent: :class:`QtGui.QWidget`
+        :param items: List of items to create the settings widget for.
+        """
+
+        # nothing to do if running without a UI
+        if not sgtk.platform.current_engine().has_ui:
+            return None
+
+        try:
+            return self._hook_instance.create_properties_widget(parent, items)
+        except Exception:
+            error_msg = traceback.format_exc()
+            self._logger.error(
+                "Error running create_properties_widget for %s" % self,
+                extra=_get_error_extra_info(error_msg)
+            )
+
     def run_process_current_session(self, item):
         """
         Executes the hook process_current_session method
