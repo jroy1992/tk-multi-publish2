@@ -36,7 +36,7 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
         schema.update({
             self._SUBMIT_TO_FARM: {
                 "type": "bool",
-                "default_value": True,
+                "default_value": False,
                 "description": "When set to True, this task will not be "
                                "published inside the DCC and will be published "
                                "on the render farm instead."
