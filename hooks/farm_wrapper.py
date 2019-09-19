@@ -8,58 +8,7 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-
 import sgtk
-
-try:
-    from sgtk.platform.qt import QtCore, QtGui
-except ImportError:
-    CustomWidgetController = None
-else:
-    class FarmWrapperWidget(QtGui.QWidget):
-        """
-        This is the plugin's custom UI.
-
-        It is meant to allow the user to send a task to the
-        render farm or not.
-        """
-        def __init__(self, parent):
-            super(FarmWrapperWidget, self).__init__(parent)
-
-            # Create a nice simple layout with a checkbox in it.
-            layout = QtGui.QFormLayout(self)
-            self.setLayout(layout)
-
-            label = QtGui.QLabel(
-                "Clicking this checkbox will submit this task to the render farm.",
-                self
-            )
-            label.setWordWrap(True)
-            layout.addRow(label)
-
-            self._check_box = QtGui.QCheckBox("Submit to Farm", self)
-            self._check_box.setTristate(False)
-            layout.addRow(self._check_box)
-
-        @property
-        def state(self):
-            """
-            :returns: ``True`` if the checkbox is checked, ``False`` otherwise.
-            """
-            return self._check_box.checkState() == QtCore.Qt.Checked
-
-        @state.setter
-        def state(self, is_checked):
-            """
-            Update the status of the checkbox.
-
-            :param bool is_checked: When set to ``True``, the checkbox will be
-                checked.
-            """
-            if is_checked:
-                self._check_box.setCheckState(QtCore.Qt.Checked)
-            else:
-                self._check_box.setCheckState(QtCore.Qt.Unchecked)
 
 
 class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
@@ -102,56 +51,6 @@ class FarmWrapperPlugin(sgtk.get_hook_baseclass()):
             }
         })
         return schema
-
-    def create_settings_widget(self, parent):
-        """
-        Creates the widget for our plugin.
-
-        :param parent: Parent widget for the settings widget.
-        :type parent: :class:`QtGui.QWidget`
-
-        :returns: Custom widget for this plugin.
-        :rtype: :class:`QtGui.QWidget`
-        """
-        tab_widget = QtGui.QTabWidget(parent)
-
-        base_gui = super(FarmWrapperPlugin, self).create_settings_widget(tab_widget)
-        tab_widget.addTab(base_gui, super(FarmWrapperPlugin, self).name)
-
-        tab_widget.addTab(FarmWrapperWidget(tab_widget), "Farm")
-
-        return tab_widget
-
-    def get_ui_settings(self, widget):
-        """
-        Retrieves the state of the ui and returns a settings dictionary.
-
-        :param parent: The settings widget returned by :meth:`create_settings_widget`
-        :type parent: :class:`QtGui.QWidget`
-
-        :returns: Dictionary of settings.
-        """
-        submit_widget = widget.findChild(FarmWrapperWidget)
-        return {self._SUBMIT_TO_FARM: submit_widget.state}
-
-    def set_ui_settings(self, widget, settings):
-        """
-        Populates the UI with the settings for the plugin.
-
-        :param parent: The settings widget returned by :meth:`create_settings_widget`
-        :type parent: :class:`QtGui.QWidget`
-        :param list(dict) settings: List of settings dictionaries, one for each
-            item in the publisher's selection.
-
-        :raises NotImplementeError: Raised if this implementation does not
-            support multi-selection.
-        """
-        if len(settings) > 1:
-            raise NotImplementedError()
-        settings = settings[0]
-
-        submit_widget = widget.findChild(FarmWrapperWidget)
-        submit_widget.state = settings[self._SUBMIT_TO_FARM]
 
     def validate(self, task_settings, item):
         """
