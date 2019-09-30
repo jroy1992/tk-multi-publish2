@@ -71,7 +71,6 @@ class PublishTask(object):
         new_task._visible = task_dict["visible"]
         new_task._enabled = task_dict["enabled"]
 
-
         return new_task
 
     def __init__(self, plugin, item):
@@ -83,9 +82,10 @@ class PublishTask(object):
         self._plugin = plugin
         self._name = None # task name override of plugin name
         self._description = None # task description override of plugin desc.
+        self._settings = None # initialized by init_task_settings
 
-        # call the parent plugin to initialize the instanced task settings
-        self._settings = self._plugin.init_task_settings(self._item)
+        # initialize the task settings
+        self.init_task_settings()
 
         self._accepted = False
         self._active = True
@@ -93,6 +93,14 @@ class PublishTask(object):
         self._enabled = True
 
         logger.debug("Created publish tree task: %s" % (self,))
+
+    def init_task_settings(self):
+        """
+        Initialize the instanced task settings, by using the parent plugin.
+
+        """
+
+        self._settings = self._plugin.init_task_settings(self._item)
 
     def to_dict(self):
         """
