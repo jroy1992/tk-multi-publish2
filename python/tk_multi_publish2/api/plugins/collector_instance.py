@@ -117,6 +117,28 @@ class CollectorPluginInstance(PluginInstanceBase):
                 extra=_get_error_extra_info(error_msg)
             )
 
+    def run_on_properties_changed(self, items):
+        """
+        Method that runs when the property_changed signal is fired from the property widget.
+
+        .. note:: This method is a no-op if running without a UI present
+
+        :param items:  List of items to run property change hook for.
+        """
+
+        # nothing to do if running without a UI
+        if not sgtk.platform.current_engine().has_ui:
+            return None
+
+        try:
+            return self._hook_instance.on_properties_changed(self.settings, items)
+        except Exception:
+            error_msg = traceback.format_exc()
+            self._logger.error(
+                "Error running on_properties_changed for %s" % self,
+                extra=_get_error_extra_info(error_msg)
+            )
+
     def run_process_current_session(self, item):
         """
         Executes the hook process_current_session method
