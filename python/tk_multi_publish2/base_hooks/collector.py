@@ -16,6 +16,7 @@ from sgtk.platform.validation import convert_string_to_type
 
 from sgtk import TankError, TankMissingTemplateError
 from .base import PluginBase
+import fnmatch
 
 
 class CollectorPlugin(PluginBase):
@@ -67,13 +68,10 @@ class CollectorPlugin(PluginBase):
                 # Add a row entry
                 self._layout.addRow(display_name, property_widget)
 
-    class PropertyWidget(PluginBase.ValueWidgetBaseClass):
+    class PropertyWidgetBaseClass(PluginBase.ValueWidgetBaseClass):
         """
-        A widget class representing an item property.
+        Base Class for creating any custom properties widgets.
         """
-        # Signal for when a property value has changed
-        value_changed = QtCore.Signal()
-
         def __init__(self, parent, hook, items, name, **kwargs):
 
             self._items = items
@@ -99,8 +97,24 @@ class CollectorPlugin(PluginBase):
             else:
                 value = values.pop()
 
-            super(CollectorPlugin.PropertyWidget, self).__init__(
+            super(CollectorPlugin.PropertyWidgetBaseClass, self).__init__(
                 parent, hook, name, value, value_type, **kwargs)
+
+        @property
+        def items(self):
+            return self._items
+
+    class PropertyWidget(PropertyWidgetBaseClass):
+        """
+        A widget class representing an item property.
+        """
+        # Signal for when a property value has changed
+        value_changed = QtCore.Signal()
+
+        def __init__(self, parent, hook, items, name, **kwargs):
+
+            super(CollectorPlugin.PropertyWidget, self).__init__(
+                parent, hook, items, name, **kwargs)
 
             self._layout = QtGui.QVBoxLayout(self)
 
@@ -128,21 +142,27 @@ class CollectorPlugin(PluginBase):
             field_name = value_widget.get_field_name()
 
             # TODO: Implement value validation before update.
-            self._value = value_widget.get_value()
+            value = value_widget.get_value()
 
             # Convert any NoneStr values or empty strings to real None
-            if self._value in (self.NoneValue, ""):
-                self._value = None
+            if value in (self.NoneValue, ""):
+                value = None
             # Else ensure that we are casting the value to its correct type
-            elif self._value != self.MultiplesValue:
-                value_type = type(self._value).__name__
+            elif value != self.MultiplesValue:
+                value_type = type(value).__name__
                 if value_type != self._value_type:
                     if value_type == "str":
-                        self._value = convert_string_to_type(self._value, self._value_type)
+                        value = convert_string_to_type(value, self._value_type)
                     else:
                         raise TypeError(
                             "Unknown conversion from type '{}' to '{}'".format(
                                 value_type, self._value_type))
+
+            # only fire the property_changed signal when the value actually changed.
+            if value == self._value:
+                return
+            else:
+                self._value = value
 
             # If this is coming from a different widget, we need to update
             # this widget with the value
@@ -174,7 +194,7 @@ class CollectorPlugin(PluginBase):
         def items(self):
             return self._items
 
-    class FieldsPropertyWidget(PluginBase.ValueWidgetBaseClass):
+    class FieldsPropertyWidget(PropertyWidgetBaseClass):
         """
         A widget class representing a template setting.
         """
@@ -182,26 +202,22 @@ class CollectorPlugin(PluginBase):
         # Signal for when a setting field has changed
         field_changed = QtCore.Signal()
 
-        @property
-        def items(self):
-            return self._items
-
         def __init__(self, parent, hook, items, name, **kwargs):
 
             super(CollectorPlugin.FieldsPropertyWidget, self).__init__(
-                parent, hook, name, value=None, **kwargs)
+                parent, hook, items, name, **kwargs)
 
             self._fields = {}
             self._field_widgets = {}
             self._layout = QtGui.QVBoxLayout(self)
-            self._items = items
 
             # list of non editable fields for the widget
+
             self._non_editable_fields = kwargs.pop("non_editable_fields", list())
 
-            # Connect the property_changed signal to the update_value slot so that
-            # this widget will update whenever any property is changed.
-            parent.property_changed.connect(self.update_value)
+            # Connect the field_changed signal to the property_changed slot so that
+            # so this widget will broadcast the changes to the properties widget.
+            self.field_changed.connect(parent.property_changed)
 
             # TODO: dump this in a collapsible widget
             self._fields_layout = QtGui.QFormLayout()
@@ -223,35 +239,6 @@ class CollectorPlugin(PluginBase):
             """Return the property fields"""
             return self._fields
 
-        def update_value(self):
-            """
-            Handle when the template value has changed
-            """
-            # The sender is the controller widget, which received its signal
-            # from a PropertyWidget value_widget
-
-            value_widget = self.sender().sender()
-            field_name = value_widget.get_field_name()
-
-            # Ensure the signal isn't from a field widget
-            if field_name in self._field_widgets:
-                return
-
-            value = self._value
-            super(CollectorPlugin.FieldsPropertyWidget, self).update_value()
-            if value == self._value:
-                # Bail if the value didn't actually change
-                return
-
-            # Regather the fields used to resolve the template
-            self.gather_fields()
-
-            # Recache the data
-            self.cache_data()
-
-            # Update the ui
-            self.refresh_ui()
-
         def update_field(self):
             """
             Handle when a field value has changed
@@ -261,7 +248,7 @@ class CollectorPlugin(PluginBase):
             # The sender is the controller widget, which received its signal
             # from a PropertyWidget value_widget/field_widget
 
-            field_widget = self.sender().sender()
+            field_widget = self.sender()
 
             field_name = field_widget.get_field_name()
             field_value = field_widget.get_value()
@@ -306,11 +293,11 @@ class CollectorPlugin(PluginBase):
             # Update the fields dictionary with the new value
             self._fields[field_name] = field_value
 
-            # Emit that our field value has changed
-            self.field_changed.emit()
-
-            # Recache the data
+            # apply the changes done by user
             self.apply_changes()
+
+            # Emit that our field value has changed, this will fire property_changed
+            self.field_changed.emit()
 
             # Update the ui
             if do_full_refresh:
@@ -344,16 +331,13 @@ class CollectorPlugin(PluginBase):
             """Store persistent data on the properties object"""
             for item in self._items:
                 for key, value in self._fields.iteritems():
-                    if value == self.MultiplesValue or key in self._non_editable_fields:
+                    if value == self.MultiplesValue or \
+                            any([fnmatch.fnmatch(key, pattern) for pattern in self._non_editable_fields]):
                         # Don't override value with multiples key,
                         # or even keys that are not editable.
                         continue
                     # update the item.properties.fields
                     item.properties[self._name][key] = value
-
-                for task in item._tasks:
-                    # re-init the task settings to pick up the new fields.
-                    task.init_task_settings()
 
         def refresh_ui(self):
             """Update the UI"""
@@ -368,7 +352,8 @@ class CollectorPlugin(PluginBase):
             for key, value in self._fields.iteritems():
                 # Create the field widget
                 field_widget = self.value_widget_factory(
-                    key, value, "str", key not in self._non_editable_fields)
+                    key, value, "str",
+                    not any([fnmatch.fnmatch(key, pattern) for pattern in self._non_editable_fields]))
                 field_widget.setObjectName(key)
                 field_widget.setParent(self)
 
@@ -378,11 +363,7 @@ class CollectorPlugin(PluginBase):
 
                 # Connect the value_changed signal to the property_changed signal so
                 # all other properties will be notified about the change
-                field_widget.value_changed.connect(self.parent().property_changed)
-
-                # Connect the property_changed signal to the update_field slot so that
-                # this widget will update whenever any property is changed.
-                self.parent().property_changed.connect(self.update_field)
+                field_widget.value_changed.connect(self.update_field)
 
     ############################################################################
     # Collector properties
@@ -575,6 +556,20 @@ class CollectorPlugin(PluginBase):
             widget = CollectorPlugin.PropertiesWidgetController(parent, self, items)
 
         return widget
+
+    def on_properties_changed(self, settings, items):
+        """
+        Method that runs when the property_changed signal is fired from the property widget.
+
+        :param settings: Settings for the plugin.
+        :param item: Item to run property change hook for.
+        """
+        # raise NotImplementedError
+        # TODO: remove this.
+        print "running on_properties_changed"
+        for item in items:
+            for task in item.tasks:
+                task.init_task_settings()
 
 
     def process_file(self, settings, parent_item, path):
