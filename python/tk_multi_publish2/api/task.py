@@ -97,7 +97,6 @@ class PublishTask(object):
     def init_task_settings(self):
         """
         Initialize the instanced task settings, by using the parent plugin.
-
         """
 
         self._settings = self._plugin.init_task_settings(self._item)

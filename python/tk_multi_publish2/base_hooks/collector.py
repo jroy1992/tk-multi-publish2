@@ -72,6 +72,9 @@ class CollectorPlugin(PluginBase):
         """
         Base Class for creating any custom properties widgets.
         """
+        # Signal for when a property value has changed
+        value_changed = QtCore.Signal()
+
         def __init__(self, parent, hook, items, name, **kwargs):
 
             self._items = items
@@ -108,8 +111,6 @@ class CollectorPlugin(PluginBase):
         """
         A widget class representing an item property.
         """
-        # Signal for when a property value has changed
-        value_changed = QtCore.Signal()
 
         def __init__(self, parent, hook, items, name, **kwargs):
 
@@ -199,9 +200,6 @@ class CollectorPlugin(PluginBase):
         A widget class representing a template setting.
         """
 
-        # Signal for when a setting field has changed
-        field_changed = QtCore.Signal()
-
         def __init__(self, parent, hook, items, name, **kwargs):
 
             super(CollectorPlugin.FieldsPropertyWidget, self).__init__(
@@ -215,9 +213,9 @@ class CollectorPlugin(PluginBase):
 
             self._non_editable_fields = kwargs.pop("non_editable_fields", list())
 
-            # Connect the field_changed signal to the property_changed slot so that
+            # Connect the value_changed signal to the property_changed slot so that
             # so this widget will broadcast the changes to the properties widget.
-            self.field_changed.connect(parent.property_changed)
+            self.value_changed.connect(parent.property_changed)
 
             # TODO: dump this in a collapsible widget
             self._fields_layout = QtGui.QFormLayout()
@@ -297,7 +295,7 @@ class CollectorPlugin(PluginBase):
             self.apply_changes()
 
             # Emit that our field value has changed, this will fire property_changed
-            self.field_changed.emit()
+            self.value_changed.emit()
 
             # Update the ui
             if do_full_refresh:
@@ -557,7 +555,7 @@ class CollectorPlugin(PluginBase):
 
         return widget
 
-    def on_properties_changed(self, settings, items):
+    def on_properties_changed(self, settings, item):
         """
         Method that runs when the property_changed signal is fired from the property widget.
 
@@ -567,9 +565,8 @@ class CollectorPlugin(PluginBase):
         # raise NotImplementedError
         # TODO: remove this.
         print "running on_properties_changed"
-        for item in items:
-            for task in item.tasks:
-                task.init_task_settings()
+        for task in item.tasks:
+            task.init_task_settings()
 
 
     def process_file(self, settings, parent_item, path):

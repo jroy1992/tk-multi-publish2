@@ -757,7 +757,8 @@ class AppDialog(QtGui.QWidget):
 
         if hasattr(widget, "property_changed"):
             widget.property_changed.connect(lambda:
-                                            self._publish_manager._collector_instance.run_on_properties_changed(items))
+                                            [self._publish_manager._collector_instance.run_on_properties_changed(item)
+                                             for item in items])
 
         # skip settings for now
         ## render settings
