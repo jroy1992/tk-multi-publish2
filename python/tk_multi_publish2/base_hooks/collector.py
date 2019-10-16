@@ -8,13 +8,9 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import collections
-from operator import itemgetter
-
 from sgtk.platform.qt import QtCore, QtGui
 from sgtk.platform.validation import convert_string_to_type
 
-from sgtk import TankError, TankMissingTemplateError
 from .base import PluginBase
 import fnmatch
 
@@ -210,7 +206,7 @@ class CollectorPlugin(PluginBase):
             self._layout = QtGui.QVBoxLayout(self)
 
             # list of non editable fields for the widget
-
+            # the values in the list are matched using fnmatch
             self._non_editable_fields = kwargs.pop("non_editable_fields", list())
 
             # Connect the value_changed signal to the property_changed slot so that
@@ -447,15 +443,7 @@ class CollectorPlugin(PluginBase):
                 "values": {
                     "type": "dict"
                 },
-                "default_value": [
-                    {
-                        "name": "fields",
-                        "display_name": "Item Fields",
-                        "editable": True,
-                        "non_editable_fields": ["eye", "SEQ"],
-                        "type": "FieldsPropertyWidget"
-                    },
-                ],
+                "default_value": [],
                 "allows_empty": True,
                 "description": (
                     "A list of properties to display in the UI. Each entry in the list is a dict "
@@ -562,12 +550,7 @@ class CollectorPlugin(PluginBase):
         :param settings: Settings for the plugin.
         :param item: Item to run property change hook for.
         """
-        # raise NotImplementedError
-        # TODO: remove this.
-        print "running on_properties_changed"
-        for task in item.tasks:
-            task.init_task_settings()
-
+        raise NotImplementedError
 
     def process_file(self, settings, parent_item, path):
         """

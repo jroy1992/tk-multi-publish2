@@ -257,7 +257,7 @@ class PublishPlugin(HookBaseClass):
                 # Add in the version key if applicable
                 setting.extra["fields"]["version"] = \
                     self.TemplateSettingWidget.TemplateField(
-                        "version", publish_version, "str", editable=True, is_missing=False)
+                        "version", publish_version, "str", editable=False, is_missing=False)
 
         return task_settings
 
