@@ -12,7 +12,7 @@ from sgtk.platform.qt import QtCore, QtGui
 from sgtk.platform.validation import convert_string_to_type
 
 from .base import PluginBase
-import fnmatch
+import re
 
 
 class CollectorPlugin(PluginBase):
@@ -205,9 +205,9 @@ class CollectorPlugin(PluginBase):
             self._field_widgets = {}
             self._layout = QtGui.QVBoxLayout(self)
 
-            # list of non editable fields for the widget
-            # the values in the list are matched using fnmatch
-            self._non_editable_fields = kwargs.pop("non_editable_fields", list())
+            # list of editable fields for the widget
+            # the values in the list are matched using regex
+            self._editable_fields = kwargs.pop("editable_fields", list())
 
             # Connect the value_changed signal to the property_changed slot so that
             # so this widget will broadcast the changes to the properties widget.
@@ -326,7 +326,7 @@ class CollectorPlugin(PluginBase):
             for item in self._items:
                 for key, value in self._fields.iteritems():
                     if value == self.MultiplesValue or \
-                            any([fnmatch.fnmatch(key, pattern) for pattern in self._non_editable_fields]):
+                            not any([re.match(pattern, key) for pattern in self._editable_fields]):
                         # Don't override value with multiples key,
                         # or even keys that are not editable.
                         continue
@@ -347,7 +347,7 @@ class CollectorPlugin(PluginBase):
                 # Create the field widget
                 field_widget = self.value_widget_factory(
                     key, value, "str",
-                    not any([fnmatch.fnmatch(key, pattern) for pattern in self._non_editable_fields]))
+                    any([re.match(pattern, key) for pattern in self._editable_fields]))
                 field_widget.setObjectName(key)
                 field_widget.setParent(self)
 
@@ -550,7 +550,7 @@ class CollectorPlugin(PluginBase):
         :param settings: Settings for the plugin.
         :param item: Item to run property change hook for.
         """
-        raise NotImplementedError
+        pass
 
     def process_file(self, settings, parent_item, path):
         """
