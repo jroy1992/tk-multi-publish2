@@ -15,7 +15,7 @@ import re
 import mari
 import sgtk
 from sgtk import TankError
-from sgtk.util.filesystem import ensure_folder_exists
+from sgtk.util.filesystem import ensure_folder_exists, freeze_permissions
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -183,8 +183,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             )
 
 
-            udim_pattern = publisher.util.get_path_for_frame(latest_published_path, "*")
-            udim_files = glob.glob(udim_pattern)
+            udim_files = publisher.util.get_sequence_path_files(latest_published_path)
             available_udims = {int(publisher.util.get_frame_number(path)) for path in udim_files}
             non_available_udims = required_udims - available_udims
 
@@ -197,7 +196,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                             "tooltip": "Show more info",
                             "text": "Previous publish path not found on disk:\n{}\nfor UDIMs {}.\n"
                                     "Please select them to export from this session.".format(
-                                udim_pattern, non_available_udims)
+                                latest_published_path, non_available_udims)
                         }
                     }
                 )
@@ -249,10 +248,12 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # us but happened 100% for the client!
                         layer = layers[0]
                         layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        self._freeze_udim_permissions(path)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
                         channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        self._freeze_udim_permissions(path)
 
                     else:
                         self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
@@ -282,3 +283,10 @@ class MariPublishTexturesPlugin(HookBaseClass):
 
         return publisher.util.copy_files(udim_copy_path_list, publish_path, seal_files=seal_files,
                                          is_sequence=True)
+
+    def _freeze_udim_permissions(self, path):
+        publisher = self.parent
+        udim_files = publisher.util.get_sequence_path_files(path)
+        for file in udim_files:
+            freeze_permissions(file)
+
