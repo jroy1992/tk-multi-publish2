@@ -233,10 +233,11 @@ class MariPublishTexturesPlugin(HookBaseClass):
             geo = mari.geo.find(geo_name)
             channel = geo.findChannel(channel_name)
 
-            if item.get_property("uv_index_list") is not []:
+            uv_index_list = item.get_property("uv_index_list")
+            if not isinstance(uv_index_list, list) or len(uv_index_list) > 0:
                 if layer_name:
                     layer = channel.findLayer(layer_name)
-                    layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+                    layer.exportImages(path, UVIndexList=uv_index_list or [])
 
                 else:
                     # publish the entire channel, flattened
@@ -247,12 +248,12 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # with only a single layer would cause Mari to crash - this bug was not reproducible by
                         # us but happened 100% for the client!
                         layer = layers[0]
-                        layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        layer.exportImages(path, UVIndexList=uv_index_list or [])
                         self._freeze_udim_permissions(path)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
-                        channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        channel.exportImagesFlattened(path, UVIndexList=uv_index_list or [])
                         self._freeze_udim_permissions(path)
 
                     else:
