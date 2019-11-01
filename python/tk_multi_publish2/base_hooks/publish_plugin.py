@@ -228,9 +228,6 @@ class PublishPlugin(PluginBase):
                 finally:
                     self._value_widget.blockSignals(signals_blocked)
 
-            # Emit that our value has changed
-            self.value_changed.emit()
-
             # Cache out the value
             for task in self._tasks:
                 if self._value == self.MultiplesValue:
@@ -239,12 +236,16 @@ class PublishPlugin(PluginBase):
                 # Only overwrite valid values
                 task.settings[self._name].value = self._value
 
+            # Emit that our value has changed, after updating the values
+            # otherwise other widgets still get the old settings value
+            self.value_changed.emit()
+
     class TemplateSettingWidget(SettingWidget):
         """
         A widget class representing a template setting.
         """
         TemplateField = collections.namedtuple("TemplateField",
-            "name value type editable is_missing")
+                                               "name value type editable is_missing")
 
         # Signal for when a setting field has changed
         field_changed = QtCore.Signal(TemplateField)
