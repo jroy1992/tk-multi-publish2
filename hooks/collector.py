@@ -94,6 +94,16 @@ class CollectorPlugin(HookBaseClass):
         # Set the item's fields property
         item.properties.fields = self._resolve_item_fields(settings, item)
 
+    def on_properties_changed(self, settings, item):
+        """
+        Method that runs when the property_changed signal is fired from the property widget.
+
+        :param settings: Settings for the plugin.
+        :param item: Item to run property change hook for.
+        """
+
+        for task in item.tasks:
+            task.init_task_settings()
 
     ############################################################################
     # protected helper methods
