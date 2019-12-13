@@ -14,6 +14,7 @@ import os
 import pprint
 import sgtk
 from sgtk import TankError
+from sgtk.platform.qt import QtCore, QtGui
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -88,6 +89,51 @@ DEFAULT_ITEM_TYPES = {
         "type_display": "Movie"
     }
 }
+
+
+class PopItemTypesListUI(object):
+
+    """
+    If matched_work_path_template is None, then pops up UI with available item_types, sothat user can choose
+    item_type.
+    Ex: [exr] file type
+        We have multiple item_type for exr, if matched_work_path_template is None then
+        UI will pop out listing out item_type selection.
+    """
+    def __init__(self, path, item_types):
+        self.path = path
+        self.item_types = item_types
+        self.selected_item = None
+        self.dialog = None
+        self.items_list_lw = None
+        self.create_ui()
+
+    def create_ui(self):
+        self.dialog = QtGui.QDialog()
+        self.dialog.setWindowTitle('Select Item Type')
+        self.dialog.setMinimumWidth(300)
+        self.dialog.setMinimumHeight(100)
+        main_layout = QtGui.QVBoxLayout(self.dialog)
+
+        path_label = QtGui.QLabel("File Name: {}".format(os.path.basename(self.path)))
+        main_layout.addWidget(path_label)
+        # create list widget with items
+        self.items_list_lw = QtGui.QListWidget()
+        self.items_list_lw.addItems(self.item_types)
+        main_layout.addWidget(self.items_list_lw)
+        # create "OK" button
+        ok_button = QtGui.QPushButton("OK")
+        ok_button.clicked.connect(self.get_sel_item)
+        main_layout.addWidget(ok_button)
+        self.dialog.exec_()
+
+    def get_sel_item(self):
+        """
+        get selected file_type from UI
+        :return:
+        """
+        self.dialog.close()
+        self.selected_item = self.items_list_lw.currentItem().text()
 
 
 class FileCollectorPlugin(HookBaseClass):
@@ -626,6 +672,18 @@ class FileCollectorPlugin(HookBaseClass):
         # also, there should never be a match with more than one templates, since template_from_path will fail too.
         if len(template_item_type_mapping):
             resolution_order, work_path_template, item_type = template_item_type_mapping[0]
+
+        # check for matched_work_path_template
+        is_matched_work_path_template = False
+        for each_set in template_item_type_mapping:
+            if each_set[1]:
+                is_matched_work_path_template = True
+        if not is_matched_work_path_template:
+            current_item_types = []
+            for each in template_item_type_mapping:
+                current_item_types.append(each[-1])
+            obj = PopItemTypesListUI(path, current_item_types)
+            item_type = obj.selected_item
 
         if not common_type_found:
             # no common type match. try to use the mimetype category. this will
