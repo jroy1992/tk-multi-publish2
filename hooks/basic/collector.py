@@ -678,12 +678,17 @@ class FileCollectorPlugin(HookBaseClass):
         for each_set in template_item_type_mapping:
             if each_set[1]:
                 is_matched_work_path_template = True
+        # if is_matched_work_path_template none, pop-up UI for user selection
         if not is_matched_work_path_template:
             current_item_types = []
             for each in template_item_type_mapping:
                 current_item_types.append(each[-1])
-            obj = PopItemTypesListUI(path, current_item_types)
-            item_type = obj.selected_item
+            # if items_type are more than 1 then only pop-up UI
+            if len(current_item_types) > 1:
+                ui_object = PopItemTypesListUI(path, current_item_types)
+                item_type = ui_object.selected_item
+            else:
+                item_type = current_item_types[0]
 
         if not common_type_found:
             # no common type match. try to use the mimetype category. this will
