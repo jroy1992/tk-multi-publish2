@@ -306,12 +306,10 @@ class PublishPlugin(HookBaseClass):
 
         # ---- validate the settings required to publish
 
-        global_attr_list = ("publish_version", "publish_linked_entity_name")
-        local_attr_list = ("publish_type", "publish_name", "publish_path", "publish_symlink_path")
+        attr_list = ("publish_version", "publish_linked_entity_name", "publish_type",
+                     "publish_name", "publish_path", "publish_symlink_path")
 
-        if not self._set_item_properties(task_settings, item, global_attr_list):
-            return False
-        if not self._set_item_properties(task_settings, item, local_attr_list, set_local=True):
+        if not self._set_item_properties(task_settings, item, attr_list, set_local=True):
             return False
 
         # ---- check for conflicting publishes of this path with a status
