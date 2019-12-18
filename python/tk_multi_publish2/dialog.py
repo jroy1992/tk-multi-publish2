@@ -212,7 +212,7 @@ class AppDialog(QtGui.QWidget):
             lambda: self._on_browse(folders=True))
 
         # currently displayed item
-        self._current_item = None
+        self._current_items = None
 
         # Currently selected tasks. If a selection is created in the GUI that
         # contains multiple task types or even other tree item types, then,
@@ -334,28 +334,32 @@ class AppDialog(QtGui.QWidget):
         # now look at selection
         items = self.ui.items_tree.selectedItems()
 
+        if len(items):
+            only_items_selected = all([isinstance(item.get_publish_instance(), PublishItem) or
+                                       item.get_publish_instance() is None for item in items])
+        else:
+            only_items_selected = False
+
         if self._is_task_selection_homogeneous(items):
             # We should update the tasks details ui.
-            self._current_item = None
+            self._current_items = None
             publish_tasks = _TaskSelection([item.get_publish_instance() for item in items])
             self._update_task_details_ui(publish_tasks)
-        elif len(items) != 1:
-            # Otherwise we can't show items from a multi-selection, so inform the user.
-            self._current_item = None
-            self._update_task_details_ui()
-            # show overlay with 'please select single item'
-            self.ui.details_stack.setCurrentIndex(self.PLEASE_SELECT_DETAILS)
-        else:
-            # 1 item selected
-            tree_item = items[0]
-            publish_object = tree_item.get_publish_instance()
-            if isinstance(publish_object, PublishItem):
+        elif only_items_selected:
+            # multiple items selected
+            if all([isinstance(item.get_publish_instance(), PublishItem) for item in items]):
                 self._update_task_details_ui()
-                self._create_item_details(tree_item)
-            elif publish_object is None:
+                self._create_item_details(items)
+            elif any([item.get_publish_instance() is None for item in items]):
                 self._update_task_details_ui()
                 # top node summary
                 self._create_master_summary_details()
+        else:
+            # Otherwise we can't show different task types or a combination of item and task from a multi-selection.
+            self._current_items = None
+            self._update_task_details_ui()
+            # show overlay with 'please select single item'
+            self.ui.details_stack.setCurrentIndex(self.PLEASE_SELECT_DETAILS)
 
     def _is_task_selection_homogeneous(self, items):
         """
@@ -427,6 +431,8 @@ class AppDialog(QtGui.QWidget):
         if (
             # If we had a selection before
             self._current_tasks and
+            # Also re-build the UI if the selection changes, to enable multi-select updates
+            self._current_tasks == new_task_selection and
             # and it was of the same type as the new one.
             self._current_tasks.is_same_task_type(new_task_selection)
         ):
@@ -435,7 +441,7 @@ class AppDialog(QtGui.QWidget):
             logger.debug("Building a custom ui for %s.", new_task_selection.plugin)
             widget = new_task_selection.plugin.run_create_settings_widget(
                 self.ui.task_settings_parent,
-                item=new_task_selection._items[0]._item)
+                new_task_selection._items)
             self.ui.task_settings.widget = widget
 
         # Update the UI with the settings from the current plugin.
@@ -507,7 +513,7 @@ class AppDialog(QtGui.QWidget):
         """
         comments = self.ui.item_comments.toPlainText()
         # if this is the summary description...
-        if self._current_item is None:
+        if self._current_items is None:
             if self._summary_comment != comments:
                 self._summary_comment = comments
 
@@ -522,14 +528,16 @@ class AppDialog(QtGui.QWidget):
 
             self.ui.item_comments._show_placeholder = self._summary_comment_multiple_values
 
-        # the "else" below means if this is a publish item
+        # the "else" below means if this is a list publish items
         else:
-            self._current_item.description = comments
+            for current_item in self._current_items:
+                # update the comment on all selected items.
+                current_item.description = comments
 
             # <multiple values> placeholder text should not appear for individual items
             self.ui.item_comments._show_placeholder = False
 
-            # if at least one task has a comment that is different than the summary description, set 
+            # if at least one task has a comment that is different than the summary description, set
             # <multiple values> indicator to true
             if self._summary_comment != comments:
                 self._summary_comment_multiple_values = True
@@ -539,7 +547,7 @@ class AppDialog(QtGui.QWidget):
         Update the currently selected item with the given
         thumbnail pixmap
         """
-        if not self._current_item:
+        if not self._current_items:
             # this is the summary item
             self._summary_thumbnail = pixmap
             if pixmap:
@@ -553,93 +561,204 @@ class AppDialog(QtGui.QWidget):
                         item.thumbnail = self._summary_thumbnail
                         item.thumbnail_explicit = False
         else:
-            self._current_item.thumbnail = pixmap
-            # specify that the new thumbnail overrides the one inherited from
-            # summary
-            self._current_item.thumbnail_explicit = True
+            for current_item in self._current_items:
+                current_item.thumbnail = pixmap
+                # specify that the new thumbnail overrides the one inherited from
+                # summary
+                current_item.thumbnail_explicit = True
 
-    def _create_item_details(self, tree_item):
+    def _create_item_details(self, tree_items):
         """
         Render details pane for a given item
         """
-        item = tree_item.get_publish_instance()
+        items = [tree_item.get_publish_instance() for tree_item in tree_items]
 
-        self._current_item = item
+        self._current_items = items
         self.ui.details_stack.setCurrentIndex(self.ITEM_DETAILS)
-        self.ui.item_icon.setPixmap(item.icon)
 
-        self.ui.item_name.setText(item.name)
-        self.ui.item_type.setText(item.type_display)
+        if len(items) == 1:
+            item = items[0]
+            tree_item = tree_items[0]
 
-        # check the state of screenshot
-        if item.thumbnail_enabled:
-            # display and make thumbnail editable
-            self.ui.item_thumbnail_label.show()
-            self.ui.item_thumbnail.show()
+            self.ui.item_icon.setPixmap(item.icon)
+
+            self.ui.item_name.setText(item.name)
+            self.ui.item_type.setText(item.type_display)
+
+            # check the state of screenshot
+            if item.thumbnail_enabled:
+                # display and make thumbnail editable
+                self.ui.item_thumbnail_label.show()
+                self.ui.item_thumbnail.show()
+                self.ui.item_thumbnail.setEnabled(True)
+
+            elif not item.thumbnail_enabled and item.thumbnail:
+                # show thumbnail but disabled
+                self.ui.item_thumbnail_label.show()
+                self.ui.item_thumbnail.show()
+                self.ui.item_thumbnail.setEnabled(False)
+
+            else:
+                # hide thumbnail
+                self.ui.item_thumbnail_label.hide()
+                self.ui.item_thumbnail.hide()
+
+            self.ui.item_description_label.setText("Description")
+            self.ui.item_comments.setPlainText(item.description)
+
+            # if summary thumbnail is defined, item thumbnail should inherit it
+            # unless item thumbnail was set after summary thumbnail
+            if self._summary_thumbnail and not item.thumbnail_explicit:
+                item.thumbnail = self._summary_thumbnail
+
+            self.ui.item_thumbnail._set_multiple_values_indicator(False)
+            self.ui.item_thumbnail.set_thumbnail(item.thumbnail)
+
+            # Items with default thumbnails should still be able to have override thumbnails set by the user
             self.ui.item_thumbnail.setEnabled(True)
 
-        elif not item.thumbnail_enabled and item.thumbnail:
-            # show thumbnail but disabled
+            if item.parent.is_root:
+                self.ui.context_widget.show()
+
+                if item.context_change_allowed:
+                    self.ui.context_widget.enable_editing(
+                        True,
+                        "<p>Task and Entity Link to apply to the selected item:</p>"
+                    )
+                else:
+                    self.ui.context_widget.enable_editing(
+                        False,
+                        "<p>Context changing has been disabled for this item. "
+                        "It will be associated with "
+                        "<strong><a style='color:#C8C8C8; text-decoration:none' "
+                        "href='%s'>%s</a></strong></p>" %
+                        (item.context.shotgun_url, item.context)
+                    )
+
+                # set the context
+                self.ui.context_widget.set_context(item.context)
+            else:
+                self.ui.context_widget.hide()
+
+            # create summary
+            self.ui.item_summary_label.show()
+            summary = tree_item.create_summary()
+            # generate a summary
+
+            if len(summary) == 0:
+                summary_text = "No items to process."
+
+            else:
+                summary_text = "<p>The following items will be processed:</p>"
+                summary_text += "".join(["<p>%s</p>" % line for line in summary])
+
+            self.ui.item_summary.setText(summary_text)
+
+        else:
+            # are all items of same type?
+            first_item_type = items[0].type
+            same_type_items = all([item.type == first_item_type for item in items])
+            # do items have same description?
+            first_item_description = items[0].description
+            same_description_items = all([item.description == first_item_description for item in items])
+
+            if same_type_items:
+                item_icon = items[0].icon
+            else:
+                item_icon = QtGui.QPixmap(":/tk_multi_publish2/icon_256.png")
+
+            self.ui.item_icon.setPixmap(item_icon)
+            display_name = self._bundle.get_setting("display_name")
+            self.ui.item_name.setText("%s Summary" % display_name)
+
+            self.ui.item_description_label.setText("Description for selected items")
+            if same_description_items:
+                self.ui.item_comments.setPlainText(first_item_description)
+            else:
+                # we can't set any text here if the items have different description
+                # otherwise it fires on_item_comment_change
+                # self.ui.item_comments.setPlainText(self._summary_comment)
+                # the item_comments PublishDescriptionFocus won't display placeholder text if it is in focus
+                # so clearing the focus from that widget in order to see the <multiple values> warning once
+                # the master summary details page is opened
+                self.ui.item_comments.clearFocus()
+                self.ui.item_comments._show_placeholder = True
+                # need to repaint the widget for proper updation
+                self.ui.item_comments.update()
+
+            # for the summary, attempt to display the appropriate context in the
+            # context widget. if all publish items have the same context, display
+            # that one. if there are multiple, show none and update the label to
+            # reflect it.
+
+            # iterate over all the tree items to find currently used contexts
+            current_contexts = {}
             self.ui.item_thumbnail_label.show()
             self.ui.item_thumbnail.show()
-            self.ui.item_thumbnail.setEnabled(False)
 
-        else:
-            # hide thumbnail
-            self.ui.item_thumbnail_label.hide()
-            self.ui.item_thumbnail.hide()
+            thumbnail_has_multiple_values = False
+            for item in items:
+                if item.thumbnail_explicit:
+                    thumbnail_has_multiple_values = True
 
-        self.ui.item_description_label.setText("Description")
-        self.ui.item_comments.setPlainText(item.description)
+                if isinstance(item, PublishItem):
+                    context = item.context
+                    context_key = str(context)
+                    current_contexts[context_key] = context
 
-        # if summary thumbnail is defined, item thumbnail should inherit it
-        # unless item thumbnail was set after summary thumbnail
-        if self._summary_thumbnail and not item.thumbnail_explicit:
-            item.thumbnail = self._summary_thumbnail
-        
-        self.ui.item_thumbnail._set_multiple_values_indicator(False)
-        self.ui.item_thumbnail.set_thumbnail(item.thumbnail)
-        
+            self.ui.item_thumbnail._set_multiple_values_indicator(thumbnail_has_multiple_values)
+            self.ui.item_thumbnail.set_thumbnail(self._summary_thumbnail)
 
-        # Items with default thumbnails should still be able to have override thumbnails set by the user
-        self.ui.item_thumbnail.setEnabled(True)
+            # setting enabled to true to be able to take a snapshot to define the thumbnail
+            self.ui.item_thumbnail.setEnabled(True)
 
-        if item.parent.is_root:
-            self.ui.context_widget.show()
-
-            if item.context_change_allowed:
-                self.ui.context_widget.enable_editing(
-                    True,
-                    "<p>Task and Entity Link to apply to the selected item:</p>"
-                )
+            if len(current_contexts) == 1:
+                # only one context being used by current items. prepopulate it in
+                # the summary view's context widget
+                context_key = current_contexts.keys()[0]
+                self.ui.context_widget.set_context(current_contexts[context_key])
+                context_label_text = "Task and Entity Link to apply to selected items:"
             else:
-                self.ui.context_widget.enable_editing(
-                    False,
-                    "<p>Context changing has been disabled for this item. "
-                    "It will be associated with "
-                    "<strong><a style='color:#C8C8C8; text-decoration:none' "
-                    "href='%s'>%s</a></strong></p>" %
-                    (item.context.shotgun_url, item.context)
+                self.ui.context_widget.set_context(
+                    None,
+                    task_display_override=" -- Multiple values -- ",
+                    link_display_override=" -- Multiple values -- ",
+                )
+                context_label_text = (
+                    "Currently publishing items to %s contexts. "
+                    "Override all items here:" % (len(current_contexts),)
                 )
 
-            # set the context
-            self.ui.context_widget.set_context(item.context)
-        else:
-            self.ui.context_widget.hide()
+            self.ui.context_widget.show()
+            # enabling context editing by default, this is handled down the line on_item_context_change
+            # updated context only reflects in items that have context_change_allowed
+            # TODO: Should we disable editing? when any of the selection don't have context change allowed.
+            self.ui.context_widget.enable_editing(True, context_label_text)
 
-        # create summary
-        self.ui.item_summary_label.show()
-        summary = tree_item.create_summary()
-        # generate a summary
+            # create summary for all items
+            # no need to have a summary since the main label says summary
+            self.ui.item_summary_label.hide()
 
-        if len(summary) == 0:
-            summary_text = "No items to process."
-
-        else:
             summary_text = "<p>The following items will be processed:</p>"
-            summary_text += "".join(["<p>%s</p>" % line for line in summary])
+            for tree_item in tree_items:
+                summary = tree_item.create_summary()
+                # generate a summary
+                summary_text += "".join(["<p>%s</p>" % line for line in summary])
 
-        self.ui.item_summary.setText(summary_text)
+            self.ui.item_summary.setText(summary_text)
+            self.ui.item_type.setText("%d items to execute" % len(tree_items))
+
+        # run create properties widget
+        widget = self._publish_manager._collector_instance.run_create_properties_widget(
+            self.ui.property_settings_parent,
+            items
+        )
+        self.ui.property_settings.widget = widget
+
+        if hasattr(widget, "property_changed"):
+            widget.property_changed.connect(lambda:
+                                            [self._publish_manager._collector_instance.run_on_properties_changed(item)
+                                             for item in items])
 
         # skip settings for now
         ## render settings
@@ -686,13 +805,16 @@ class AppDialog(QtGui.QWidget):
         self.ui.item_thumbnail.setEnabled(True)
 
         self.ui.item_description_label.setText("Description for all items")
-        self.ui.item_comments.setPlainText(self._summary_comment)
-
-        # the item_comments PublishDescriptionFocus won't display placeholder text if it is in focus
-        # so clearing the focus from that widget in order to see the <multiple values> warning once 
-        # the master summary details page is opened
-        self.ui.item_comments.clearFocus()
-        self.ui.item_comments._show_placeholder = self._summary_comment_multiple_values
+        # if we know that summary comment is different than item comments, we can't set it on all items
+        if self._summary_comment_multiple_values:
+            # the item_comments PublishDescriptionFocus won't display placeholder text if it is in focus
+            # so clearing the focus from that widget in order to see the <multiple values> warning once
+            # the master summary details page is opened
+            self.ui.item_comments.clearFocus()
+            self.ui.item_comments._show_placeholder = self._summary_comment_multiple_values
+            self.ui.item_comments.update()
+        else:
+            self.ui.item_comments.setPlainText(self._summary_comment)
 
         # for the summary, attempt to display the appropriate context in the
         # context widget. if all publish items have the same context, display
@@ -727,6 +849,7 @@ class AppDialog(QtGui.QWidget):
             )
 
         self.ui.context_widget.show()
+        # TODO: Should we disable editing? when any of the items don't have context change allowed.
         self.ui.context_widget.enable_editing(True, context_label_text)
 
         # create summary for all items
@@ -1365,7 +1488,7 @@ class AppDialog(QtGui.QWidget):
         # TODO: see todo below...
         # items_with_new_context = []
 
-        if self._current_item is None:
+        if self._current_items is None:
             # this is the summary item - so update all items!
             for top_level_item in self._publish_manager.tree.root_item.children:
                 if top_level_item.context_change_allowed:
@@ -1382,19 +1505,20 @@ class AppDialog(QtGui.QWidget):
                     num_errors = self._progress_handler.pop()
                     sync_required = True
         else:
-            if self._current_item.context_change_allowed:
-                self._progress_handler.set_phase(self._progress_handler.PHASE_LOAD)
-                self._progress_handler.push("Updating context for item: %s" % self._current_item.name)
-                self._current_item.context = context
+            for current_item in self._current_items:
+                if current_item.context_change_allowed:
+                    self._progress_handler.set_phase(self._progress_handler.PHASE_LOAD)
+                    self._progress_handler.push("Updating context for item: %s" % current_item.name)
+                    current_item.context = context
 
-                # TODO: see todo below...
-                # this item and all of its descendents in the tree need to have
-                # their plugins reattached given the new context
-                # items_with_new_context.append(self._current_item)
-                # items_with_new_context.extend([i for i in self._current_item.children])
+                    # TODO: see todo below...
+                    # this item and all of its descendents in the tree need to have
+                    # their plugins reattached given the new context
+                    # items_with_new_context.append(self._current_item)
+                    # items_with_new_context.extend([i for i in self._current_item.children])
 
-                num_errors = self._progress_handler.pop()
-                sync_required = True
+                    num_errors = self._progress_handler.pop()
+                    sync_required = True
 
         # TODO: attach plugins for the destination context. this is commented, coz it is handled in on_context_changed
         # out for now as it is a change in behavior and likely implies some

@@ -191,6 +191,14 @@ class FileCollectorPlugin(HookBaseClass):
                     "fields": "context, *",
                     "allows_empty": True,
                 },
+                "resolution_order": {
+                    "type": "int",
+                    "default_value": 0,
+                    "allows_empty": True,
+                    "description": "Resolution order to follow when multiple item types"
+                                   "are available the same extension, lower resolution order gets higher priority."
+                                   "Item type with a matching work_path_template, gets priority of -1."
+                }
             }
         )
         return schema
@@ -566,15 +574,17 @@ class FileCollectorPlugin(HookBaseClass):
         # keep track if a common type was identified for the extension
         common_type_found = False
 
-        # mapping to track how many item types contain the given extension
-        template_item_type_mapping = dict()
+        # tuple of resolution_order, work_path_template and item_type
+        template_item_type_mapping = list()
 
         # look for the extension in the common file type info dict
         # using the raw value to get a raw work_path_template
         for current_item_type, type_info in settings["Item Types"].value.iteritems():
-
-            matched_work_path_template = None
             if any(fnmatch.fnmatch(current_extension, extension) for current_extension in type_info["extensions"]):
+                # matched work path template
+                matched_work_path_template = None
+                # resolution order to follow in case matched_work_path_template is None.
+                matched_resolution_order = type_info["resolution_order"]
                 # match this raw template against all environments, to find a matching template
                 if type_info["work_path_template"]:
                     envs = self.parent.sgtk.pipeline_configuration.get_environments()
@@ -601,17 +611,21 @@ class FileCollectorPlugin(HookBaseClass):
                 if is_sequence and not current_item_type.endswith(".sequence"):
                     tmp_type = "%s.%s" % (current_item_type, "sequence")
                     if tmp_type in settings["Item Types"].value:
-                        template_item_type_mapping[matched_work_path_template] = tmp_type
+                        template_item_type_mapping.append((matched_resolution_order, matched_work_path_template,
+                                                           tmp_type))
                         continue
 
-                template_item_type_mapping[matched_work_path_template] = current_item_type
+                template_item_type_mapping.append((matched_resolution_order, matched_work_path_template,
+                                                   current_item_type))
+
+                # sort the list on resolution_order, giving preference to a matching template
+                template_item_type_mapping.sort(key=lambda elem: elem[0] if not elem[1] else -1)
 
         # this should work fine in case there is no work path template defined too
         # this method gives preference to the first match that we get for any template
         # also, there should never be a match with more than one templates, since template_from_path will fail too.
-        for work_path_template, item_type in template_item_type_mapping.iteritems():
-            if work_path_template:
-                break
+        if len(template_item_type_mapping):
+            resolution_order, work_path_template, item_type = template_item_type_mapping[0]
 
         if not common_type_found:
             # no common type match. try to use the mimetype category. this will
@@ -742,6 +756,8 @@ class FileCollectorPlugin(HookBaseClass):
         path = item.properties.get("path")
         if path:
 
+            file_info = publisher.util.get_file_path_components(path)
+
             # If its a sequence, use the first resolved path in the sequence instead
             if item.properties.get("is_sequence", False):
                 path = item.properties.sequence_paths[0]
@@ -763,8 +779,8 @@ class FileCollectorPlugin(HookBaseClass):
             fields.update(tmpl_fields)
 
             # If not already populated, attempt to get the width and height from the image
-            image_type = item.type.split(".")[1]
-            if image_type in KNOWN_IMAGE_TYPES:
+            # use extensions instead of item types
+            if file_info["extension"] in KNOWN_SEQ_EXTENSIONS:
                 if "width" not in fields or "height" not in fields:
                     # If image, use OIIO to introspect file and get WxH
                     try:
@@ -788,12 +804,11 @@ class FileCollectorPlugin(HookBaseClass):
                                 )
                             finally:
                                 fh.close()
-                    except ImportError as e:
+                    except Exception as e:
                         self.logger.warning(str(e) + ". Cannot determine width/height from %s." % path)
 
             # Get the file extension if not already defined
             if "extension" not in fields:
-                file_info = publisher.util.get_file_path_components(path)
                 fields["extension"] = file_info["extension"]
 
             # Force use of %d format

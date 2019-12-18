@@ -359,8 +359,8 @@ class PublishItem(object):
         child_item._global_properties = PublishData.from_dict(properties or {})
 
         # Set the context on the child item if defined
-        context = context or self.context
-        child_item.context = context
+        if context:
+            child_item.context = context
 
         return child_item
 
@@ -636,6 +636,10 @@ class PublishItem(object):
         """
         if not self.context_change_allowed:
             raise AttributeError("Context change for item '%s' not allowed." % self.name)
+
+        if self._context == item_context:
+            # context doesn't need to be changed
+            return
 
         self._context = item_context
 

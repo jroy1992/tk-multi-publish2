@@ -15,9 +15,8 @@ import pprint
 import traceback
 
 import sgtk
-from sgtk import TankError
+from sgtk import TankError, TankMissingTemplateError, TankMissingTemplateKeysError
 from sgtk.platform import create_setting
-from sgtk.templatekey import SequenceKey
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -190,7 +189,6 @@ class PublishPlugin(HookBaseClass):
     ############################################################################
     # standard publish plugin methods
 
-
     def init_task_settings(self, item):
         """
         Method called by the publisher to determine the initial settings for the
@@ -228,7 +226,6 @@ class PublishPlugin(HookBaseClass):
                 settings_schema,
                 task_settings.bundle
             )
-
         # Else, warn the user...
         else:
             msg = "Key: %s\n%s" % (item.type, pprint.pformat(task_settings[setting_key]))
@@ -242,6 +239,25 @@ class PublishPlugin(HookBaseClass):
                     }
                 }
             )
+
+        # Get the publish_version
+        publish_version = self._get_publish_version(task_settings, item)
+
+        # Initialize the fields dictionary for any template settings
+        for setting in task_settings.itervalues():
+            if setting.type == "template":
+                setting.extra.setdefault("fields", {})
+
+                # Add in any relevant keys stored on the item
+                for k, v in item.properties.get("fields", {}).iteritems():
+                    setting.extra["fields"][k] = \
+                        self.TemplateSettingWidget.TemplateField(
+                            k, v, "str", editable=True, is_missing=False)
+
+                # Add in the version key if applicable
+                setting.extra["fields"]["version"] = \
+                    self.TemplateSettingWidget.TemplateField(
+                        "version", publish_version, "str", editable=False, is_missing=False)
 
         return task_settings
 
@@ -385,7 +401,7 @@ class PublishPlugin(HookBaseClass):
 
         self.logger.info(
             "A Publish will be created for item '%s'." %
-                (item.name,),
+            (item.name,),
             extra={
                 "action_show_more_info": {
                     "label": "Show Info",
@@ -611,14 +627,14 @@ class PublishPlugin(HookBaseClass):
                 try:
                     self.sgtk.shotgun.delete(publish_data["type"], publish_data["id"])
                     self.logger.info("Cleaning up published file...",
-                                     extra={
-                                         "action_show_more_info": {
-                                             "label": "Publish Data",
-                                             "tooltip": "Show the publish data.",
-                                             "text": "%s" % publish_data
-                                         }
-                                     }
-                                     )
+                        extra={
+                            "action_show_more_info": {
+                                "label": "Publish Data",
+                                "tooltip": "Show the publish data.",
+                                "text": "%s" % publish_data
+                            }
+                        }
+                    )
                 except Exception:
                     self.logger.error(
                         "Failed to delete PublishedFile Entity for %s" % item.name,
@@ -752,19 +768,52 @@ class PublishPlugin(HookBaseClass):
         publish_entity_type = sgtk.util.get_published_file_entity_type(self.parent.sgtk)
         try:
             fields = self.parent.shotgun.schema_field_read(publish_entity_type)
-        except Exception, e:
+        except Exception as e:
             self.logger.error("Failed to find fields for the '%s' schema: %s"
                               % (publish_entity_type, e))
 
         bad_fields = list(set(sg_fields.keys()).difference(set(fields)))
         if bad_fields:
             self.logger.warning(
-                    "The '%s' schema does not support these fields: %s. Skipping." % \
-                    (publish_entity_type, pprint.pformat(bad_fields))
+                "The '%s' schema does not support these fields: %s. Skipping." % \
+                (publish_entity_type, pprint.pformat(bad_fields))
             )
 
         # Return the subset of valid fields
         return {k: v for k, v in sg_fields.iteritems() if k not in bad_fields}
+
+
+    def _resolve_template_setting_value(self, setting, item):
+        """Resolve the setting template value"""
+        publisher = self.parent
+
+        if not setting.value:
+            return None
+
+        # Start with the fields stored with the setting
+        fields = {k: v.value for (k, v) in setting.extra["fields"].iteritems()}
+
+        tmpl = publisher.get_template_by_name(setting.value)
+        if not tmpl:
+            # this template was not found in the template config!
+            raise TankMissingTemplateError("The Template '%s' does not exist!" % setting.value)
+
+        # First get the fields from the context
+        try:
+            fields.update(item.context.as_template_fields(tmpl))
+        except TankError:
+            self.logger.debug(
+                "Unable to get context fields for publish_path_template.")
+
+        missing_keys = tmpl.missing_keys(fields, True)
+        if missing_keys:
+            raise TankMissingTemplateKeysError(
+                "Cannot resolve Template (%s). Missing keys: %s" %
+                    (setting.value, pprint.pformat(missing_keys))
+            )
+
+        # Apply fields to template to get resolved value
+        return tmpl.apply_fields(fields)
 
 
     def _get_publish_type(self, task_settings, item):
@@ -794,20 +843,12 @@ class PublishPlugin(HookBaseClass):
         Extracts the publish path via the configured publish templates
         if possible.
         """
-        publish_path_template = task_settings.get("publish_path_template").value
-        publish_path = item.get_property("path")
+        publish_path_setting = task_settings.get("publish_path_template")
+        publish_path = self._resolve_template_setting_value(publish_path_setting, item)
+        if not publish_path:
+            self.logger.debug("No publish_path_template defined. Publishing in place.")
+            publish_path = item.properties.get("path")
 
-        # If a template is defined, get the publish path from it
-        if publish_path_template:
-            publish_path = self._get_path_from_template(publish_path_template, item)
-
-        # Otherwise, if the item has an input path, fallback to publishing in place
-        elif publish_path:
-            self.logger.debug(
-                "No publish_path_template defined. Publishing in place.")
-
-        # return the path in a normalized state. no trailing separator, separators
-        # are appropriate for current os, no double separators, etc.
         return sgtk.util.ShotgunPath.normalize(publish_path)
 
 
@@ -823,57 +864,12 @@ class PublishPlugin(HookBaseClass):
         Extracts the publish symlink path via the configured publish templates
         if possible.
         """
-        publish_symlink_template = task_settings.get("publish_symlink_template").value
-        publish_symlink_path = None
+        publish_path_setting = task_settings.get("publish_symlink_template")
+        publish_path = self._resolve_template_setting_value(publish_path_setting, item)
+        if publish_path:
+            publish_path = sgtk.util.ShotgunPath.normalize(publish_path)
 
-        # If a template is defined, get the publish symlink path from it
-        if publish_symlink_template:
-
-            publish_symlink_path = self._get_path_from_template(publish_symlink_template, item)
-            self.logger.debug(
-                "Used publish_symlink_template to determine the publish path: %s" %
-                (publish_symlink_path,)
-            )
-
-        return publish_symlink_path
-
-
-    def _get_path_from_template(self, template_name, item):
-        publisher = self.parent
-
-        # Start with the item's fields
-        fields = copy.copy(item.get_property("fields", {}))
-
-        # Update the version field with the publish_version
-        fields["version"] = item.get_property("publish_version")
-
-        template = publisher.get_template_by_name(template_name)
-        if not template:
-            # this template was not found in the template config!
-            raise TankError("The Template '%s' does not exist!" % template_name)
-
-        # First get the fields from the context
-        try:
-            fields.update(item.context.as_template_fields(template))
-        except TankError, e:
-            self.logger.debug(
-                "Unable to get context fields for template '%s'." % template_name)
-
-        missing_keys = template.missing_keys(fields, True)
-        if missing_keys:
-            raise TankError(
-                "Cannot resolve template (%s). Missing keys: %s" %
-                (template_name, pprint.pformat(missing_keys))
-            )
-
-        # Apply fields to publish_symlink_template to get publish symlink path
-        path_from_template = template.apply_fields(fields)
-        self.logger.debug(
-            "Used template '%s' to determine the publish path: %s" %
-            (template_name, path_from_template)
-        )
-
-        return path_from_template
+        return publish_path
 
 
     def _get_publish_version(self, task_settings, item):
@@ -907,56 +903,16 @@ class PublishPlugin(HookBaseClass):
 
         Uses the path info hook to retrieve the publish name.
         """
-
         publisher = self.parent
 
-        # Get the input path for this item
-        path = item.get_property("path")
-
-        # Start with the item's fields
-        fields = copy.copy(item.get_property("fields", {}))
-
-        # Update the version field with the publish_version
-        fields["version"] = item.properties.publish_version
-
-        publish_name_template = task_settings.get("publish_name_template").value
-        publish_name = None
-
-        # First check if we have a publish_name_template defined and attempt to
-        # get the publish name from that
-        if publish_name_template:
-
-            pub_tmpl = publisher.get_template_by_name(publish_name_template)
-            if not pub_tmpl:
-                # this template was not found in the template config!
-                raise TankError("The Template '%s' does not exist!" % publish_name_template)
-
-            # First get the fields from the context
-            try:
-                fields.update(item.context.as_template_fields(pub_tmpl))
-            except TankError, e:
-                self.logger.debug(
-                    "Unable to get context fields for publish_name_template.")
-
-            missing_keys = pub_tmpl.missing_keys(fields, True)
-            if missing_keys:
-                raise TankError(
-                    "Cannot resolve publish_name_template (%s). Missing keys: %s" %
-                            (publish_name_template, pprint.pformat(missing_keys))
-                )
-
-            publish_name = pub_tmpl.apply_fields(fields)
-            self.logger.debug(
-                "Retrieved publish_name via publish_name_template.")
-
-        # Otherwise, if the item has an input path, fallback on file path parsing
-        elif path:
+        publish_name_setting = task_settings.get("publish_name_template")
+        publish_name = self._resolve_template_setting_value(publish_name_setting, item)
+        if not publish_name:
+            path = item.properties.get("path")
             # Use built-in method for determining publish_name
             publish_name = publisher.util.get_publish_name(path)
-            self.logger.debug(
-                "Retrieved publish_name via source file path.")
+            self.logger.debug("Retrieved publish_name via source file path.")
 
-        self.logger.info("Found publish name: %s" % publish_name)
         return publish_name
 
 
@@ -966,45 +922,8 @@ class PublishPlugin(HookBaseClass):
 
         :param item: The item to determine the publish linked entity name for
         """
-
-        publisher = self.parent
-
-        # Start with the item's fields
-        fields = copy.copy(item.get_property("fields", {}))
-
-        # Update the version field with the publish_version
-        fields["version"] = item.properties.publish_version
-
-        publish_linked_entity_name_template = task_settings.get("publish_linked_entity_name_template").value
-        publish_linked_entity_name = None
-
-        # check if we have a publish_linked_entity_name_template defined
-        if publish_linked_entity_name_template:
-
-            pub_linked_entity_name_tmpl = publisher.get_template_by_name(publish_linked_entity_name_template)
-            if not pub_linked_entity_name_tmpl:
-                # this template was not found in the template config!
-                raise TankError("The Template '%s' does not exist!" % publish_linked_entity_name_template)
-
-            # First get the fields from the context
-            try:
-                fields.update(item.context.as_template_fields(pub_linked_entity_name_tmpl))
-            except TankError, e:
-                self.logger.debug(
-                    "Unable to get context fields for publish_linked_entity_name_template.")
-
-            missing_keys = pub_linked_entity_name_tmpl.missing_keys(fields, True)
-            if missing_keys:
-                raise TankError(
-                    "Cannot resolve publish_linked_entity_name_template (%s). Missing keys: %s" %
-                            (publish_linked_entity_name_template, pprint.pformat(missing_keys))
-                )
-
-            publish_linked_entity_name = pub_linked_entity_name_tmpl.apply_fields(fields)
-            self.logger.debug(
-                "Retrieved publish_linked_entity_name via publish_linked_entity_name_template.")
-
-        return publish_linked_entity_name
+        publish_name_setting = task_settings.get("publish_linked_entity_name_template")
+        return self._resolve_template_setting_value(publish_name_setting, item)
 
 
     def _get_dependency_paths(self,  task_settings, item, node=None):

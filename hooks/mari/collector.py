@@ -82,6 +82,13 @@ class MariSessionCollector(HookBaseClass):
         """
         schema = super(MariSessionCollector, self).settings_schema
         schema["Item Types"]["default_value"].update(MARI_SESSION_ITEM_TYPES)
+        schema["Copy Files"] = {
+            "type": "bool",
+            "description": "Specifies whether the re-use old publish option should symlink or copy."
+                           "By default set to False, it will symlink files.",
+            "allows_empty": True,
+            "default_value": False,
+        }
         schema["Work File Templates"] = {
             "type": "list",
             "values": {
@@ -222,6 +229,9 @@ class MariSessionCollector(HookBaseClass):
                 # Add selected uv_index_list
                 properties["uv_index_list"] = uv_index_list
 
+                # Add a default reuse method
+                properties["reuse_files_method"] = "copy" if settings["Copy Files"].value else "symlink"
+
                 # textures should always contain UDIM or tag <UDIM>
                 properties["is_sequence"] = True
 
@@ -271,9 +281,9 @@ class MariSessionCollector(HookBaseClass):
 
             QtGui.QMessageBox.information(None, "UDIMs selected for export", message_str)
 
-        # get user input on whether to copy or export each channel
+        # get user input on whether to reuse or export each channel
         # TODO: should be replaced by create_settings_widget?
-        items = self.copy_or_export_channels(items)
+        items = self.reuse_or_export_channels(settings, items)
         return items
 
     def _add_layers_to_channel_item(self, settings, channel_item, layer_list, thumbnail):
@@ -462,7 +472,7 @@ class MariSessionCollector(HookBaseClass):
 
         # also collect sequence files
         for key in self.sgtk.template_keys.values():
-            if isinstance(key, SequenceKey):
+            if isinstance(key, SequenceKey) and key.name in fields:
                 fields.pop(key.name)
 
         work_tmpl = publisher.get_template_by_name(work_path_template)
@@ -537,7 +547,7 @@ class MariSessionCollector(HookBaseClass):
 
         return fields
 
-    def copy_or_export_channels(self, items):
+    def reuse_or_export_channels(self, settings, items):
         item_type_dict = {}
         for item in items:
             item_type_list =  item_type_dict.setdefault(item.type, [])
@@ -551,17 +561,18 @@ class MariSessionCollector(HookBaseClass):
                                       "it has atleast one channel with proper naming, or "
                                       "continue with publishing just the mari session")
         else:
-            copy_or_export_channels_ui = CopyOrExportChannels(item_type_dict["mari.channel"])
+            reuse_or_export_channels_ui = ReuseOrExportChannels(settings, item_type_dict["mari.channel"])
 
         return items
 
 
 # TODO: should be replaced by create_settings_widget?
-class CopyOrExportChannels(object):
-    def __init__(self, items):
-        self.copy_text = "Copy"
+class ReuseOrExportChannels(object):
+    def __init__(self, settings, items):
+        self.reuse_text = "Copy" if settings["Copy Files"].value else "Sym-Link"
         self.export_text = "Export"
 
+        self.settings = settings
         self.items = items
         self.row_button_grp_dict = {}
 
@@ -570,31 +581,31 @@ class CopyOrExportChannels(object):
 
         self.create_ui()
 
-    def add_checkable(self, label):
+    def add_checkable(self, item):
         """
         Add a checkable UI element to the main layout and add
         Copy or Export radiobutton options.
         Save the radiobutton group in row_button_grp_dict for later access.
 
-        :param label: label for the checkable element
+        :param item: item for the checkable elements
         """
         row_idx = self.channel_layout.count()
 
-        copy_rb = QtGui.QRadioButton(self.copy_text)
+        reuse_rb = QtGui.QRadioButton(self.reuse_text)
         export_rb = QtGui.QRadioButton(self.export_text)
         export_rb.setChecked(True)
 
         radio_button_layout = QtGui.QHBoxLayout()
-        radio_button_layout.addWidget(copy_rb)
+        radio_button_layout.addWidget(reuse_rb)
         radio_button_layout.addWidget(export_rb)
 
-        group_box = QtGui.QGroupBox(label)
+        group_box = QtGui.QGroupBox(item.name)
         group_box.setMaximumHeight(55)
         group_box.setLayout(radio_button_layout)
         group_box.setCheckable(True)
 
         button_group = QtGui.QButtonGroup(radio_button_layout)
-        button_group.addButton(copy_rb)
+        button_group.addButton(reuse_rb)
         button_group.addButton(export_rb)
         # save the button group for later access
         self.row_button_grp_dict[row_idx] = button_group
@@ -616,7 +627,7 @@ class CopyOrExportChannels(object):
 
             if group_box.isChecked():
                 button_grp = self.row_button_grp_dict[row_idx]
-                if button_grp.checkedButton().text() == self.copy_text:
+                if button_grp.checkedButton().text() == self.reuse_text:
                     self._set_uv_index_list_r(item, [])
             else:
                 # this automatically propagates to the children
@@ -630,12 +641,12 @@ class CopyOrExportChannels(object):
     def create_ui(self):
         """
         Create a dialog with the list of items received on object initialisation and,
-        based on the choice to publish or not, and to copy or export,
+        based on the choice to publish or not, and to reuse or export,
         modify the properties of each item
         """
         # create dialog
         self.dialog = QtGui.QDialog()
-        self.dialog.setWindowTitle('Copy or Export Channels')
+        self.dialog.setWindowTitle('%s or Export Channels' % self.reuse_text)
         self.dialog.setMinimumWidth(600)
         # show only title (no close button)
         self.dialog.setWindowFlags(QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowTitleHint)
@@ -643,8 +654,9 @@ class CopyOrExportChannels(object):
         main_layout = QtGui.QVBoxLayout(self.dialog)
         # add usage instructions
         instruction_label = QtGui.QLabel("Select the channels to be published.\n"
-                             "Choose `Copy` to copy the channel from previous publish.\n"
-                             "Choose `Export` to export it from the current Mari session.\n")
+                             "Choose `%s` to %s the channel from previous publish.\n"
+                             "Choose `Export` to export it from the current Mari session.\n" % (self.reuse_text,
+                                                                                                self.reuse_text))
         instruction_label.setFrameStyle(QtGui.QFrame.StyledPanel)
         instruction_label.setMaximumHeight(60)
         instruction_label.setContentsMargins(1, 5, 1, 5)
@@ -669,7 +681,7 @@ class CopyOrExportChannels(object):
 
         # add checkbox per item
         for item in self.items:
-            self.add_checkable(item.name)
+            self.add_checkable(item)
 
         # add select all/none and OK buttons
         select_all_button = QtGui.QPushButton("Select All")
@@ -699,5 +711,6 @@ class CopyOrExportChannels(object):
         children recursively to the given list.
         """
         item.properties["uv_index_list"] = uv_index_list
+        item.properties["reuse_files_method"] = "copy" if self.settings["Copy Files"].value else "symlink"
         for child in item.children:
             self._set_uv_index_list_r(child, uv_index_list)

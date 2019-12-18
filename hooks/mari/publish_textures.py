@@ -15,7 +15,7 @@ import re
 import mari
 import sgtk
 from sgtk import TankError
-from sgtk.util.filesystem import ensure_folder_exists
+from sgtk.util.filesystem import ensure_folder_exists, freeze_permissions
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -122,22 +122,22 @@ class MariPublishTexturesPlugin(HookBaseClass):
             return True
         else:
             all_udims = {patch.udim() for patch in geo.patchList()}
-            selected_udims = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
-            required_udims = all_udims - selected_udims
+            udims_to_export = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
+            udims_to_be_reused = all_udims - udims_to_export
 
-            return self._validate_udims_to_copy(task_settings, item, required_udims, selected_udims)
+            return self._validate_udims_to_reuse(task_settings, item, udims_to_be_reused, udims_to_export)
 
-    def _validate_udims_to_copy(self, task_settings, item, required_udims, selected_udims):
-        if not required_udims:
-            # nothing to be copied, so everything is okay
+    def _validate_udims_to_reuse(self, task_settings, item, udims_to_be_reused, udims_to_export):
+        if not udims_to_be_reused:
+            # nothing to be reused, so everything is okay
             return True
 
         publisher = self.parent
 
-        # find prev published version path
-        udim_copy_path_list = item.get_property("udim_copy_path_list")
+        # cache the previous published version path
+        cached_reuse_publish_path = item.get_property("cached_reuse_publish_path")
 
-        if udim_copy_path_list is None:
+        if cached_reuse_publish_path is None:
             filters = [["entity", "is", item.context.entity],
                        ["task", "is", item.context.task],
                        ["name", "is", item.properties.publish_name]]
@@ -156,54 +156,60 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         "action_show_more_info": {
                             "label": "Show Error",
                             "tooltip": "Show more info",
-                            "text": "No previous published files found for `{}` to copy UDIMs from. "
+                            "text": "No previous published files found for `{}` to {} UDIMs from. "
                                     "You need to publish all UDIMs atleast once for this item.\n"
                                     "Please select all or no UDIMs and hit reload to "
-                                    "retry publishing".format(item.properties.publish_name)
+                                    "retry publishing".format(item.properties.publish_name,
+                                                              item.get_property("reuse_files_method"))
                         }
                     }
                 )
                 return False
 
-            latest_published_path = published_files[0]['path']['local_path_linux']
+            cached_reuse_publish_path = published_files[0]['path']['local_path_linux']
+            item.properties["cached_reuse_publish_path"] = cached_reuse_publish_path
 
-            self.logger.warning(
-                "Some UDIMs to be copied from previous publish!",
-                extra = {
+        # find prev published version path
+        self.logger.warning(
+            "Some UDIMs will be reused using %s from previous publish!" % item.get_property("reuse_files_method"),
+            extra={
+                "action_show_more_info": {
+                    "label": "Show Info",
+                    "tooltip": "Show more info",
+                    "text": "UDIMs to be exported from current session: {}\n"
+                            "UDIMs to be reused: {}\n"
+                            "They will be reused, using {} from {}".format(', '.join(map(str, udims_to_export)),
+                                                                           ', '.join(map(str, udims_to_be_reused)),
+                                                                           item.get_property("reuse_files_method"),
+                                                                           cached_reuse_publish_path)
+                }
+            }
+        )
+
+        udim_files = publisher.util.get_sequence_path_files(cached_reuse_publish_path)
+        available_udims = {int(publisher.util.get_frame_number(path)) for path in udim_files}
+        non_available_udims = udims_to_be_reused - available_udims
+
+        if non_available_udims:
+            self.logger.error(
+                "Some UDIMs not selected and not previously published!",
+                extra={
                     "action_show_more_info": {
-                        "label": "Show Info",
+                        "label": "Show Error",
                         "tooltip": "Show more info",
-                        "text": "UDIMs to be exported from current session: {}\n"
-                                "UDIMs to be copied: {}\n"
-                                "They will be copied from {}".format(', '.join(map(str, selected_udims)),
-                                                                     ', '.join(map(str, required_udims)),
-                                                                     latest_published_path)
+                        "text": "Previous publish path not found on disk:\n{}\nfor UDIMs {}.\n"
+                                "Please select them to export from this session.".format(cached_reuse_publish_path,
+                                                                                         non_available_udims)
                     }
                 }
             )
-
-
-            udim_pattern = publisher.util.get_path_for_frame(latest_published_path, "*")
-            udim_files = glob.glob(udim_pattern)
-            available_udims = {int(publisher.util.get_frame_number(path)) for path in udim_files}
-            non_available_udims = required_udims - available_udims
-
-            if non_available_udims:
-                self.logger.error(
-                    "Some UDIMs not selected and not previously published!",
-                    extra={
-                        "action_show_more_info": {
-                            "label": "Show Error",
-                            "tooltip": "Show more info",
-                            "text": "Previous publish path not found on disk:\n{}\nfor UDIMs {}.\n"
-                                    "Please select them to export from this session.".format(
-                                udim_pattern, non_available_udims)
-                        }
-                    }
-                )
-                return False
-            else:
-                item.properties["udim_copy_path_list"] = udim_files
+            return False
+        else:
+            # subtract the udims to be exported from the reuse path list
+            # otherwise exported udims will be overwritten by reused paths
+            reuse_path_list = [path for path in udim_files if
+                               int(publisher.util.get_frame_number(path)) not in udims_to_export]
+            item.properties["udim_reuse_path_list"] = reuse_path_list
 
         return True
 
@@ -234,10 +240,11 @@ class MariPublishTexturesPlugin(HookBaseClass):
             geo = mari.geo.find(geo_name)
             channel = geo.findChannel(channel_name)
 
-            if item.get_property("uv_index_list") is not []:
+            uv_index_list = item.get_property("uv_index_list")
+            if not isinstance(uv_index_list, list) or len(uv_index_list) > 0:
                 if layer_name:
                     layer = channel.findLayer(layer_name)
-                    layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+                    layer.exportImages(path, UVIndexList=uv_index_list or [])
 
                 else:
                     # publish the entire channel, flattened
@@ -248,17 +255,19 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # with only a single layer would cause Mari to crash - this bug was not reproducible by
                         # us but happened 100% for the client!
                         layer = layers[0]
-                        layer.exportImages(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        layer.exportImages(path, UVIndexList=uv_index_list or [])
+                        self._freeze_udim_permissions(path)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
-                        channel.exportImagesFlattened(path, UVIndexList=item.get_property("uv_index_list") or [])
+                        channel.exportImagesFlattened(path, UVIndexList=uv_index_list or [])
+                        self._freeze_udim_permissions(path)
 
                     else:
                         self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
 
-            # after export is completed, try to copy over the udims from previous publish
-            self._copy_udims(task_settings, item, publish_path)
+            # after export is completed, try to reuse over the udims from previous publish
+            self._reuse_udims(task_settings, item, publish_path)
 
         except Exception as e:
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
@@ -270,16 +279,29 @@ class MariPublishTexturesPlugin(HookBaseClass):
         # TODO: return expanded list
         return [path]
 
-    def _copy_udims(self, task_settings, item, publish_path):
+    def _reuse_udims(self, task_settings, item, publish_path):
         # this property should be created in validate
-        udim_copy_path_list = item.get_property("udim_copy_path_list")
+        udim_reuse_path_list = item.get_property("udim_reuse_path_list")
 
-        # if empty, assume all udims were exported and nothing needs to be copied
-        if not udim_copy_path_list:
+        # if empty, assume all udims were exported and nothing needs to be reused
+        if not udim_reuse_path_list:
             return True
 
         publisher = self.parent
         seal_files = item.properties.get("seal_files", False)
 
-        return publisher.util.copy_files(udim_copy_path_list, publish_path, seal_files=seal_files,
-                                         is_sequence=True)
+        reuse_files_method = item.get_property("reuse_files_method")
+
+        if reuse_files_method == "copy":
+            return publisher.util.copy_files(udim_reuse_path_list, publish_path,
+                                             seal_files=seal_files, is_sequence=True)
+        elif reuse_files_method == "symlink":
+            return publisher.util.symlink_files(udim_reuse_path_list, publish_path, is_sequence=True)
+
+
+    def _freeze_udim_permissions(self, path):
+        publisher = self.parent
+        udim_files = publisher.util.get_sequence_path_files(path)
+        for file in udim_files:
+            freeze_permissions(file)
+
