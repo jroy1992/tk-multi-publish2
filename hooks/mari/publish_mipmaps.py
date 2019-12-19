@@ -88,7 +88,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         schema["Item Type Settings"]["values"]["items"]["publish_extension"] = {
             "type": "str",
             "default_value": None,
-            "allows_empty": True,
+            "allows_empty": False,
             "description": "Extension (image format) for which mipmap should be created."
         }
         schema["Item Type Settings"]["default_value"] = MARI_MIPMAPS_ITEM_TYPE_SETTINGS
@@ -233,52 +233,24 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         return any((_target.supports("mipmap"), _target.supports("multiimage")))
 
 
-    def _get_publish_path(self, task_settings, item):
-        """
-        Get a publish path for the supplied item with the set extension.
+    def init_task_settings(self, item):
+        task_settings = super(MariPublishMipmapsPlugin, self).init_task_settings(item)
 
-        :param item: The item to determine the publish path for
-
-        :return: A string representing the output path to supply when
-            registering a publish for the supplied item
-
-        Extracts the publish path via the configured publish templates
-        if possible.
-        """
         extension = task_settings.get("publish_extension")
-        if not extension:
-            raise TankError("publish_extension not set for item: %s" % item.name)
 
         # override the fields for this plugin, if not already done
         if not "fields" in item.local_properties:
             item.local_properties["fields"] = copy.deepcopy(item.get_property("fields"))
-            item.local_properties.fields["extension"] = extension.value
+        item.local_properties.fields["extension"] = extension.value
 
-        publish_path = super(MariPublishMipmapsPlugin, self)._get_publish_path(task_settings, item)
-        return publish_path
+        # override extension for each task setting
+        for setting in task_settings.itervalues():
+            if setting.type == "template":
+                setting.extra["fields"]["extension"] = \
+                    self.TemplateSettingWidget.TemplateField(
+                        "extension", extension.value, "str", editable=False, is_missing=False)
+        return task_settings
 
-    def _get_publish_name(self, task_settings, item):
-        """
-        Get a publish name for the supplied item with the set extension.
-
-        :param item: The item to determine the publish name for
-
-        :return: A string representing the published file name
-
-        Uses the path info hook to retrieve the publish name
-        via the configured publish templates if possible.
-        """
-        extension = task_settings.get("publish_extension")
-        if not extension:
-            raise TankError("publish_extension not set for item: %s" % item.name)
-
-        # override the fields for this plugin, if not already done
-        if not "fields" in item.local_properties:
-            item.local_properties["fields"] = copy.deepcopy(item.get_property("fields"))
-            item.local_properties.fields["extension"] = extension.value
-
-        publish_name = super(MariPublishMipmapsPlugin, self)._get_publish_name(task_settings, item)
-        return publish_name
 
     def _get_dependency_paths(self, task_settings, item):
         """
