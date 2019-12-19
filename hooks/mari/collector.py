@@ -249,7 +249,7 @@ class MariSessionCollector(HookBaseClass):
 
                 self.logger.info("Collected item: %s" % channel_item.name)
                 items.append(channel_item)
-                
+
                 if collect_layers and len(found_layers) > 1:
                     items.extend(self._add_layers_to_channel_item(settings,
                                                                   channel_item,

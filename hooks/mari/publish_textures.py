@@ -276,6 +276,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             "Published file for item '%s' to '%s'." % (item.name, path)
         )
 
+        # TODO: return expanded list
         return [path]
 
     def _reuse_udims(self, task_settings, item, publish_path):

@@ -322,24 +322,11 @@ class PublishPlugin(HookBaseClass):
 
         # ---- validate the settings required to publish
 
-        attr_list = ("publish_type", "publish_version", "publish_name", "publish_path",
-                     "publish_symlink_path", "publish_linked_entity_name")
-        for attr in attr_list:
-            try:
-                method = getattr(self, "_get_%s" % attr)
-                item.properties[attr] = method(task_settings, item)
-            except Exception:
-                self.logger.error(
-                    "Unable to determine '%s' for item: %s" % (attr, item.name),
-                    extra={
-                        "action_show_more_info": {
-                            "label": "Show Error Log",
-                            "tooltip": "Show the error log",
-                            "text": traceback.format_exc()
-                        }
-                    }
-                )
-                return False
+        attr_list = ("publish_version", "publish_linked_entity_name", "publish_type",
+                     "publish_name", "publish_path", "publish_symlink_path")
+
+        if not self._set_item_properties(task_settings, item, attr_list, set_local=True):
+            return False
 
         # ---- check for conflicting publishes of this path with a status
 
@@ -348,8 +335,8 @@ class PublishPlugin(HookBaseClass):
         # accurate list of previous publishes of this file.
         publishes = publisher.util.get_conflicting_publishes(
             item.context,
-            item.properties.publish_path,
-            item.properties.publish_name,
+            item.get_property("publish_path"),
+            item.get_property("publish_name"),
             filters=["sg_status_list", "is_not", None]
         )
 
@@ -370,20 +357,20 @@ class PublishPlugin(HookBaseClass):
             )
             return False
 
-        if item.properties.get("is_sequence") and item.properties.get("path"):
-            path = publisher.util.get_path_for_frame(item.properties.path, "*")
-            publish_path = publisher.util.get_path_for_frame(item.properties.publish_path, "*")
+        if item.get_property("is_sequence") and item.get_property("path"):
+            path = publisher.util.get_path_for_frame(item.get_property("path"), "*")
+            publish_path = publisher.util.get_path_for_frame(item.get_property("publish_path"), "*")
         else:
-            path = item.properties.get("path")
-            publish_path = item.properties.publish_path
+            path = item.get_property("path")
+            publish_path = item.get_property("publish_path")
 
         # ---- check if its an in place publish
         if path != publish_path:
             # ---- ensure the published file(s) don't already exist on disk
 
             conflict_info = None
-            if item.properties.get("is_sequence"):
-                seq_pattern = publisher.util.get_path_for_frame(item.properties.publish_path, "*")
+            if item.get_property("is_sequence"):
+                seq_pattern = publisher.util.get_path_for_frame(item.get_property("publish_path"), "*")
                 seq_files = [f for f in glob.iglob(seq_pattern) if os.path.isfile(f)]
 
                 if seq_files:
@@ -392,16 +379,16 @@ class PublishPlugin(HookBaseClass):
                         "<pre>%s</pre>" % (pprint.pformat(seq_files),)
                     )
             else:
-                if os.path.exists(item.properties.publish_path):
+                if os.path.exists(item.get_property("publish_path")):
                     conflict_info = (
-                        "The following published file already exists:<br>"
-                        "<pre>%s</pre>" % (item.properties.publish_path,)
+                        "The following published file already exists!<br>"
+                        "<pre>%s</pre>" % (item.get_property("publish_path"),)
                     )
 
             if conflict_info:
                 self.logger.error(
                     "Found conflicting publishes for 'v%s' on disk." %
-                    (item.properties.publish_version,),
+                    (item.get_property("publish_version"),),
                     extra={
                         "action_show_more_info": {
                             "label": "Show Conflicts",
@@ -419,14 +406,52 @@ class PublishPlugin(HookBaseClass):
                 "action_show_more_info": {
                     "label": "Show Info",
                     "tooltip": "Show more info",
-                    "text": "Publish Name: %s" % (item.properties.publish_name,) + "\n" +
-                            "Linked Entity Name: %s" % (item.properties.publish_linked_entity_name,) + "\n" +
-                            "Publish Path: %s" % (item.properties.publish_path,) + "\n" +
-                            "Publish Symlink Path: %s" % (item.properties.publish_symlink_path,)
+                    "text": "Publish Name: %s" % (item.get_property("publish_name"),) + "\n" +
+                            "Linked Entity Name: %s" % (item.get_property("publish_linked_entity_name"),) + "\n" +
+                            "Publish Path: %s" % (item.get_property("publish_path"),) + "\n" +
+                            "Publish Symlink Path: %s" % (item.get_property("publish_symlink_path"),)
                 }
             }
         )
 
+        return True
+
+
+    def _set_item_properties(self, task_settings, item, prop_list, set_local=False):
+        """
+        Given a list of properties, determine the value of each one by
+        attempting to use a getter method and use this value to set the
+        item's local or global properties.
+
+        :param item:            Item whose properties are to be determined
+        :param prop_list:       List of properties to be determined
+        :param set_local:       Indicate whether local (plugin specific)
+                                properties are to be set
+
+        :return:                True if all properties are set, False if not
+        """
+
+        for property in prop_list:
+            try:
+                method = getattr(self, "_get_%s" % property)
+                property_value = method(task_settings, item)
+                if not item.properties.get(property):
+                    # ensure global value for each property is set atleast once
+                    item.properties[property] = property_value
+                if set_local:
+                    item.local_properties[property] = property_value
+            except Exception:
+                self.logger.error(
+                    "Unable to determine '%s' for item: %s" % (property, item.name),
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Error Log",
+                            "tooltip": "Show the error log",
+                            "text": traceback.format_exc()
+                        }
+                    }
+                )
+                return False
         return True
 
 
@@ -443,52 +468,49 @@ class PublishPlugin(HookBaseClass):
         publisher = self.parent
 
         # Get item properties populated by validate method
-        publish_name          = item.properties.publish_name
-        publish_path          = item.properties.publish_path
-        publish_symlink_path  = item.properties.publish_symlink_path
-        publish_type          = item.properties.publish_type
-        publish_version       = item.properties.publish_version
+        publish_name          = item.get_property("publish_name")
+        publish_path          = item.get_property("publish_path")
+        publish_symlink_path  = item.get_property("publish_symlink_path")
+        publish_type          = item.get_property("publish_type")
+        publish_version       = item.get_property("publish_version")
         publish_user          = item.get_property("publish_user", default_value=None)
 
+        task_publish_paths = item.get_property("publish_paths_expanded", [])
+
         # handle publishing of files first
-        publish_files = self.publish_files(task_settings, item, publish_path)
-        if "publish_files" not in item.properties:
-            item.properties.publish_files = {}
-        item.properties.publish_files[self.name] = publish_files
+        task_publish_paths.append(self.publish_files(task_settings, item, publish_path))
 
         # symlink the files if it's defined in publish templates
-        publish_symlinks = []
         if publish_symlink_path:
-            publish_symlinks = self.symlink_publishes(
+            task_publish_paths.append(self.symlink_publishes(
                 task_settings,
                 item,
                 publish_path,
                 publish_symlink_path
-            )
-        if "publish_symlinks" not in item.properties:
-            item.properties.publish_symlinks = {}
-        item.properties.publish_symlinks[self.name] = publish_symlinks
+            ))
+
+        item.local_properties["publish_paths_expanded"] = task_publish_paths
 
         # Get any upstream dependency paths
-        dependency_paths = item.properties.get("publish_dependency_paths", [])
+        dependency_paths = self._get_dependency_paths(task_settings, item)
 
         # Get any upstream dependency ids
-        dependency_ids = item.properties.get("publish_dependency_ids", [])
+        dependency_ids = self._get_dependency_ids(task_settings, item)
 
         # If the parent item has publish data, include those ids in the
         # list of dependencies as well
-        if "sg_publish_data_list" in item.parent.properties:
-            dependency_ids.extend([ent["id"] for ent in item.parent.properties["sg_publish_data_list"]])
+        if item.parent.get_property("sg_publish_data_list"):
+            dependency_ids.extend([ent["id"] for ent in item.parent.get_property("sg_publish_data_list")])
 
         # get any additional_publish_fields that have been defined
         sg_fields = {}
         additional_fields = task_settings.get("additional_publish_fields").value or {}
         for template_key, sg_field in additional_fields.iteritems():
-            if template_key in item.properties.fields:
-                sg_fields[sg_field] = item.properties.fields[template_key]
+            if template_key in item.get_property("fields"):
+                sg_fields[sg_field] = item.get_property("fields")[template_key]
 
         # If we have a source file path, add it to the publish metadata
-        path = item.properties.get("path")
+        path = item.get_property("path")
         if path:
             sg_fields["sg_path_to_source"] = path
 
@@ -557,13 +579,14 @@ class PublishPlugin(HookBaseClass):
         if not sg_publish_data:
             self.undo(task_settings, item)
         else:
-            if "sg_publish_data_list" not in item.properties:
-                item.properties.sg_publish_data_list = []
+            item.properties.setdefault("sg_publish_data_list", [])
+            item.local_properties.setdefault("sg_publish_data_list", [])
 
-            # add the publish data to item properties
+            # add the publish data to local and global item properties
+            item.local_properties.sg_publish_data_list.append(sg_publish_data)
             item.properties.sg_publish_data_list.append(sg_publish_data)
 
-        if exception is not None:
+        if exception:
             raise exception
 
 
@@ -581,18 +604,26 @@ class PublishPlugin(HookBaseClass):
 
         self.logger.info("Cleaning up copied files for %s..." % item.name)
 
-        sg_publish_data_list = item.properties.get("sg_publish_data_list")
-        publish_path = item.properties.get("publish_path")
-        publish_symlink_path = item.properties.get("publish_symlink_path")
+        task_publish_data_list = item.get_property("sg_publish_data_list")
+        task_expanded_pub_paths = item.get_property("publish_paths_expanded")
 
-        if publish_symlink_path:
-            self.delete_files(task_settings, item, publish_symlink_path)
+        if task_expanded_pub_paths:
+            # since we already have the actual paths, we don't need to re-expand
+            # using delete_files()
+            self.parent.util.delete_files(task_expanded_pub_paths)
 
-        # Delete any files on disk
-        self.delete_files(task_settings, item, publish_path)
+        else:
+            publish_path = item.get_property("publish_path")
+            publish_symlink_path = item.get_property("publish_symlink_path")
 
-        if sg_publish_data_list:
-            for publish_data in sg_publish_data_list:
+            if publish_symlink_path:
+                self.delete_files(task_settings, item, publish_symlink_path)
+
+            # Delete any files on disk
+            self.delete_files(task_settings, item, publish_path)
+
+        if task_publish_data_list:
+            for publish_data in task_publish_data_list:
                 try:
                     self.sgtk.shotgun.delete(publish_data["type"], publish_data["id"])
                     self.logger.info("Cleaning up published file...",
@@ -615,8 +646,9 @@ class PublishPlugin(HookBaseClass):
                             }
                         }
                     )
+
             # pop the sg_publish_data_list too
-            item.properties.pop("sg_publish_data_list")
+            item.local_properties.pop("sg_publish_data_list")
 
 
     def finalize(self, task_settings, item):
@@ -631,13 +663,13 @@ class PublishPlugin(HookBaseClass):
         :param item: Item to process
         """
 
-        if "sg_publish_data_list" in item.properties:
+        if item.get_property("sg_publish_data_list"):
             publisher = self.parent
 
             # get the data for the publish that was just created in SG
-            sg_publish_data_list = item.properties.sg_publish_data_list
+            task_publish_data_list = item.get_property("sg_publish_data_list")
 
-            for publish_data in sg_publish_data_list:
+            for publish_data in task_publish_data_list:
                 # ensure conflicting publishes have their status cleared
                 publisher.util.clear_status_for_conflicting_publishes(
                     item.context, publish_data)
@@ -668,19 +700,19 @@ class PublishPlugin(HookBaseClass):
         """
         publisher = self.parent
 
-        path = item.properties.get("path")
+        path = item.get_property("path")
         if not path:
             raise KeyError("Base class implementation of publish_files() method requires a 'path' property.")
 
         # ---- get a list of files to be copied
-        is_sequence = item.properties.get("is_sequence", False)
+        is_sequence = item.get_property("is_sequence", False)
         if is_sequence:
-            work_files = item.properties.get("sequence_paths", [])
+            work_files = item.get_property("sequence_paths", [])
         else:
             work_files = [path]
 
         # Determine if we should seal the copied files or not
-        seal_files = item.properties.get("seal_files", False)
+        seal_files = item.get_property("seal_files", False)
 
         return publisher.util.copy_files(work_files, publish_path, seal_files=seal_files, is_sequence=is_sequence)
 
@@ -892,3 +924,21 @@ class PublishPlugin(HookBaseClass):
         """
         publish_name_setting = task_settings.get("publish_linked_entity_name_template")
         return self._resolve_template_setting_value(publish_name_setting, item)
+
+
+    def _get_dependency_paths(self,  task_settings, item, node=None):
+        """
+        Find all dependency paths for the current item.
+
+        :return: List of upstream dependency paths
+        """
+        return item.get_property("publish_dependency_paths", [])
+
+
+    def _get_dependency_ids(self, task_settings, item, node=None):
+        """
+        Find all dependency ids for the current item.
+
+        :return: List of upstream dependency ids
+        """
+        return item.get_property("publish_dependency_ids", [])
