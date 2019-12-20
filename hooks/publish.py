@@ -249,7 +249,7 @@ class PublishPlugin(HookBaseClass):
                 setting.extra.setdefault("fields", {})
 
                 # Add in any relevant keys stored on the item
-                for k, v in item.properties.get("fields", {}).iteritems():
+                for k, v in item.get_property("fields", {}).iteritems():
                     setting.extra["fields"][k] = \
                         self.TemplateSettingWidget.TemplateField(
                             k, v, "str", editable=True, is_missing=False)

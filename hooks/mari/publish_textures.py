@@ -8,10 +8,8 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights 
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import glob
 import os
-import pprint
-import re
+
 import mari
 import sgtk
 from sgtk import TankError
@@ -140,7 +138,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
         if cached_reuse_publish_path is None:
             filters = [["entity", "is", item.context.entity],
                        ["task", "is", item.context.task],
-                       ["name", "is", item.properties.publish_name]]
+                       ["name", "is", item.get_property("publish_name")]]
             order = [{'field_name': 'version_number', 'direction': 'desc'}]
 
             published_files = publisher.shotgun.find("PublishedFile",
@@ -159,7 +157,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                             "text": "No previous published files found for `{}` to {} UDIMs from. "
                                     "You need to publish all UDIMs atleast once for this item.\n"
                                     "Please select all or no UDIMs and hit reload to "
-                                    "retry publishing".format(item.properties.publish_name,
+                                    "retry publishing".format(item.get_property("publish_name"),
                                                               item.get_property("reuse_files_method"))
                         }
                     }
@@ -167,7 +165,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 return False
 
             cached_reuse_publish_path = published_files[0]['path']['local_path_linux']
-            item.properties["cached_reuse_publish_path"] = cached_reuse_publish_path
+            item.local_properties["cached_reuse_publish_path"] = cached_reuse_publish_path
 
         # find prev published version path
         self.logger.warning(
@@ -209,7 +207,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             # otherwise exported udims will be overwritten by reused paths
             reuse_path_list = [path for path in udim_files if
                                int(publisher.util.get_frame_number(path)) not in udims_to_export]
-            item.properties["udim_reuse_path_list"] = reuse_path_list
+            item.local_properties["udim_reuse_path_list"] = reuse_path_list
 
         return True
 
