@@ -270,7 +270,7 @@ class FileCollectorPlugin(HookBaseClass):
             "type": "bool",
             "default_value": False,
             "allows_empty": True,
-            "description": "popup ui if work_path_template is none and having multiple item_types."
+            "description": "Popup UI to allow the user to specify the Item Type if one cannot be determined procedurally."
         }
         return schema
 
