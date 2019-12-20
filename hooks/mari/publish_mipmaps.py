@@ -119,18 +119,21 @@ class MariPublishMipmapsPlugin(HookBaseClass):
             self.logger.error(error_msg)
             return False
 
-        # reuse method from publish_textures to ensure that
+        geo_name = item.properties.mari_geo_name
+        geo = mari.geo.find(geo_name)
+        all_udims = {patch.udim() for patch in geo.patchList()}
+
+        # if nothing is selected, and uv_index_list is not an empty list,
+        # mipmaps are to be created for all udims
         if item.get_property("uv_index_list") is None:
-            return True
-        else:
-            geo_name = item.properties.mari_geo_name
-            geo = mari.geo.find(geo_name)
+            item.local_properties["uv_index_list"] = [all_udims]
 
-            all_udims = {patch.udim() for patch in geo.patchList()}
-            udims_to_export = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
-            udims_to_be_reused = all_udims - udims_to_export
+        udims_to_export = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
+        udims_to_be_reused = all_udims - udims_to_export
 
-            return self._validate_udims_to_reuse(task_settings, item, udims_to_be_reused, udims_to_export)
+        # reuse method from publish_textures to ensure that
+        # we have previous version files to link to
+        return self._validate_udims_to_reuse(task_settings, item, udims_to_be_reused, udims_to_export)
 
 
     def publish_files(self, task_settings, item, publish_path):
@@ -158,7 +161,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
 
             # write mipmaps only for the required udims
             uv_index_list = item.get_property("uv_index_list")
-            if not isinstance(uv_index_list, list) or len(uv_index_list) > 0:
+            if uv_index_list != []:
                 source_path_list = self._get_dependency_paths(task_settings, item)
                 source_paths_expanded = []
 
@@ -167,7 +170,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                     seq_path = publisher.util.get_frame_sequence_path(source_path)
                     if seq_path:
                         all_udim_source_path_list = publisher.util.get_sequence_path_files(source_path)
-                        udims_to_export = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
+                        udims_to_export = {1001 + uv_index for uv_index in uv_index_list}
 
                         current_source_path_list = [path for path in all_udim_source_path_list if
                                                     int(publisher.util.get_frame_number(path)) in udims_to_export]
