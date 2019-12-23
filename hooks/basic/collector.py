@@ -14,6 +14,7 @@ import os
 import pprint
 import sgtk
 from sgtk import TankError
+from sgtk.platform.qt import QtCore, QtGui
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -88,6 +89,70 @@ DEFAULT_ITEM_TYPES = {
         "type_display": "Movie"
     }
 }
+
+
+class PopupItemTypesListUI(object):
+
+    """
+    If matched_work_path_template is None, then pops up UI with available item_types, sothat user can choose
+    item_type.
+    Ex: [exr] file type
+        We have multiple item_type for exr, if matched_work_path_template is None then
+        UI will pop out listing out item_type selection.
+    """
+    def __init__(self, engine, path, item_types):
+        self.engine = engine
+        self.path = path
+        self.item_types = item_types
+        self.selected_item = None
+        self.dialog = None
+        self.items_list_widget = None
+        self.create_ui()
+
+    def create_ui(self):
+        self.dialog = QtGui.QDialog()
+        self.dialog.setWindowTitle('Select Item Type')
+        self.dialog.setMinimumWidth(300)
+        self.dialog.setMinimumHeight(100)
+        self.dialog.setWindowFlags(QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowTitleHint)
+        self.dialog.keyPressEvent = self.key_press_event
+        main_layout = QtGui.QVBoxLayout(self.dialog)
+
+        qtwidgets = sgtk.platform.framework.load_framework(
+            self.engine, self.engine.context, self.engine.env, "tk-framework-qtwidgets_v2.x.x")
+        elided_label = qtwidgets.import_module("elided_label")
+
+        path_label = elided_label.ElidedLabel()
+        path_label.setText("File Name: {}".format(self.path))
+        main_layout.addWidget(path_label)
+        # create list widget with items
+        self.items_list_widget = QtGui.QListWidget()
+        self.items_list_widget.addItems(self.item_types)
+        main_layout.addWidget(self.items_list_widget)
+        # select first item
+        self.items_list_widget.setCurrentRow(0)
+        # create "OK" button
+        ok_button = QtGui.QPushButton("OK")
+        ok_button.clicked.connect(self.get_selected_item)
+        main_layout.addWidget(ok_button)
+        self.dialog.exec_()
+
+    def get_selected_item(self):
+        """
+        get selected file_type from UI
+        :return:
+        """
+        self.dialog.close()
+        self.selected_item = self.items_list_widget.currentItem().text()
+
+    def key_press_event(self, keyEvent):
+        """
+        This function will skip Escape key from closing UI
+        :param keyEvent:
+        :return:
+        """
+        if keyEvent.key() != QtCore.Qt.Key_Escape:
+            QtGui.QDialog.keyPressEvent(self.dialog, keyEvent)
 
 
 class FileCollectorPlugin(HookBaseClass):
@@ -201,6 +266,12 @@ class FileCollectorPlugin(HookBaseClass):
                 }
             }
         )
+        schema["Item Types UI"] = {
+            "type": "bool",
+            "default_value": False,
+            "allows_empty": True,
+            "description": "Popup UI to allow the user to specify the Item Type if one cannot be determined procedurally."
+        }
         return schema
 
 
@@ -626,6 +697,14 @@ class FileCollectorPlugin(HookBaseClass):
         # also, there should never be a match with more than one templates, since template_from_path will fail too.
         if len(template_item_type_mapping):
             resolution_order, work_path_template, item_type = template_item_type_mapping[0]
+            # 0 index contains a matching work_path_template if any.
+            # if there is no match that means we need to ask the user
+            if not work_path_template and len(template_item_type_mapping) > 1:
+                # if items_type are more than 1 then only pop-up UI and if the setting has enabled UI
+                if settings.get("Item Types UI") and settings.get("Item Types UI").value:
+                    ui_object = PopupItemTypesListUI(self.parent.engine, path,
+                                                     [mapping[2] for mapping in template_item_type_mapping])
+                    item_type = ui_object.selected_item
 
         if not common_type_found:
             # no common type match. try to use the mimetype category. this will
