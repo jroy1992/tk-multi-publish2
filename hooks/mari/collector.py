@@ -84,8 +84,8 @@ class MariSessionCollector(HookBaseClass):
         schema["Item Types"]["default_value"].update(MARI_SESSION_ITEM_TYPES)
         schema["Copy Files"] = {
             "type": "bool",
-            "description": "Specifies whether the re-use old publish option should symlink or copy."
-                           "By default set to False, it will symlink files.",
+            "description": "Specifies whether the re-use old publish option should link or copy."
+                           "By default set to False, it will hard link files.",
             "allows_empty": True,
             "default_value": False,
         }
@@ -228,9 +228,6 @@ class MariSessionCollector(HookBaseClass):
 
                 # Add selected uv_index_list
                 properties["uv_index_list"] = uv_index_list
-
-                # Add a default reuse method
-                properties["reuse_files_method"] = "copy" if settings["Copy Files"].value else "symlink"
 
                 # textures should always contain UDIM or tag <UDIM>
                 properties["is_sequence"] = True
@@ -569,7 +566,7 @@ class MariSessionCollector(HookBaseClass):
 # TODO: should be replaced by create_settings_widget?
 class ReuseOrExportChannels(object):
     def __init__(self, settings, items):
-        self.reuse_text = "Copy" if settings["Copy Files"].value else "Sym-Link"
+        self.reuse_text = "Copy" if settings["Copy Files"].value else "Link"
         self.export_text = "Export"
 
         self.settings = settings
@@ -711,6 +708,5 @@ class ReuseOrExportChannels(object):
         children recursively to the given list.
         """
         item.properties["uv_index_list"] = uv_index_list
-        item.properties["reuse_files_method"] = "copy" if self.settings["Copy Files"].value else "symlink"
         for child in item.children:
             self._set_uv_index_list_r(child, uv_index_list)

@@ -154,11 +154,10 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         "action_show_more_info": {
                             "label": "Show Error",
                             "tooltip": "Show more info",
-                            "text": "No previous published files found for `{}` to {} UDIMs from. "
+                            "text": "No previous published files found for `{}` to reuse UDIMs from. "
                                     "You need to publish all UDIMs atleast once for this item.\n"
                                     "Please select all or no UDIMs and hit reload to "
-                                    "retry publishing".format(item.get_property("publish_name"),
-                                                              item.get_property("reuse_files_method"))
+                                    "retry publishing".format(item.get_property("publish_name"))
                         }
                     }
                 )
@@ -169,16 +168,15 @@ class MariPublishTexturesPlugin(HookBaseClass):
 
         # find prev published version path
         self.logger.warning(
-            "Some UDIMs will be reused using %s from previous publish!" % item.get_property("reuse_files_method"),
+            "Some UDIMs will be reused from previous publish!",
             extra={
                 "action_show_more_info": {
                     "label": "Show Info",
                     "tooltip": "Show more info",
                     "text": "UDIMs to be exported from current session: {}\n"
                             "UDIMs to be reused: {}\n"
-                            "They will be reused, using {} from {}".format(', '.join(map(str, udims_to_export)),
+                            "They will be reused from {}".format(', '.join(map(str, udims_to_export)),
                                                                            ', '.join(map(str, udims_to_be_reused)),
-                                                                           item.get_property("reuse_files_method"),
                                                                            cached_reuse_publish_path)
                 }
             }
@@ -239,7 +237,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             channel = geo.findChannel(channel_name)
 
             uv_index_list = item.get_property("uv_index_list")
-            if not isinstance(uv_index_list, list) or len(uv_index_list) > 0:
+            if uv_index_list != []:
                 if layer_name:
                     layer = channel.findLayer(layer_name)
                     layer.exportImages(path, UVIndexList=uv_index_list or [])
@@ -288,13 +286,12 @@ class MariPublishTexturesPlugin(HookBaseClass):
         publisher = self.parent
         seal_files = item.properties.get("seal_files", False)
 
-        reuse_files_method = item.get_property("reuse_files_method")
 
-        if reuse_files_method == "copy":
+        if task_settings["Copy Files"].value:
             return publisher.util.copy_files(udim_reuse_path_list, publish_path,
                                              seal_files=seal_files, is_sequence=True)
-        elif reuse_files_method == "symlink":
-            return publisher.util.symlink_files(udim_reuse_path_list, publish_path, is_sequence=True)
+        else:
+            return publisher.util.hardlink_files(udim_reuse_path_list, publish_path, is_sequence=True)
 
 
     def _freeze_udim_permissions(self, path):

@@ -225,6 +225,32 @@ def symlink_files(src_files, dest_path, is_sequence=False):
     )
 
 
+def hardlink_files(src_files, dest_path, is_sequence=False):
+    """
+    This method creates hard links for each path conforming to dest_path
+    pointing to the corresponding file in src_files.
+
+    This is used to link files in an item's publish_path to previous version's
+    publish path(s).
+
+    If the item has "is_sequence" set, it will attempt to link all paths
+    assuming they meet the required criteria.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "hardlink_files",
+        src_files=src_files,
+        dest_path=dest_path,
+        is_sequence=is_sequence
+    )
+
+
 def delete_files(paths_to_delete):
     """
     This method handles deleting an item's path(s) from a designated location.

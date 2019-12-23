@@ -714,12 +714,36 @@ class BasicPathInfo(HookBaseClass):
         If the item has "sequence_paths" set, it will attempt to symlink all paths
         assuming they meet the required criteria.
         """
+        self.link_files(src_files, dest_path, is_sequence, symlink=True)
+
+
+    def hardlink_files(self, src_files, dest_path, is_sequence=False):
+        """
+        This method creates hard links for each path conforming to dest_path
+        pointing to the corresponding file in src_files.
+
+        This is used to link files in an item's publish_path to previous version's
+        publish path(s).
+
+        If the item has "is_sequence" set, it will attempt to link all paths
+        assuming they meet the required criteria.
+        """
+        self.link_files(src_files, dest_path, is_sequence, symlink=False)
+
+
+    def link_files(self, src_files, dest_path, is_sequence=False, symlink=True):
+        """
+        This method handles linking each file in src_files to dest_path.
+
+        If "is_sequence" is set, it will attempt to link all paths
+        assuming they meet the required criteria.
+        """
 
         publisher = self.parent
 
         logger = publisher.logger
 
-        # ---- symlink the publish files to the publish symlink path
+        # ---- link the publish files to the dest_path
         processed_files = []
         for src_file in src_files:
 
@@ -733,11 +757,14 @@ class BasicPathInfo(HookBaseClass):
             if src_file == dest_file:
                 continue
 
-            # symlink the file
+            # link the file
             try:
                 dest_folder = os.path.dirname(dest_file)
                 filesystem.ensure_folder_exists(dest_folder)
-                filesystem.symlink_file(src_file, dest_file)
+                if symlink:
+                    filesystem.symlink_file(src_file, dest_file)
+                else:
+                    filesystem.hardlink_file(src_file, dest_file)
             except Exception as e:
                 raise Exception(
                     "Failed to link file from '%s' to '%s'.\n%s" %
@@ -750,6 +777,7 @@ class BasicPathInfo(HookBaseClass):
             processed_files.append(dest_file)
 
         return processed_files
+
 
     def delete_files(self, paths_to_delete):
         """
