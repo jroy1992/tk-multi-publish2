@@ -281,7 +281,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
 
         # if empty, assume all udims were exported and nothing needs to be reused
         if not udim_reuse_path_list:
-            return True
+            return []
 
         publisher = self.parent
         seal_files = item.properties.get("seal_files", False)
