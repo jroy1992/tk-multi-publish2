@@ -126,7 +126,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         # if nothing is selected, and uv_index_list is not an empty list,
         # mipmaps are to be created for all udims
         if item.get_property("uv_index_list") is None:
-            item.local_properties["uv_index_list"] = [all_udims]
+            item.local_properties["uv_index_list"] = [patch.uvIndex() for patch in geo.patchList()]
 
         udims_to_export = {1001 + uv_index for uv_index in item.get_property("uv_index_list")}
         udims_to_be_reused = all_udims - udims_to_export
@@ -183,9 +183,16 @@ class MariPublishMipmapsPlugin(HookBaseClass):
 
             # reuse the other UDIMs from previous publish
             mipmap_paths.extend(self._reuse_udims(task_settings, item, publish_path))
-
         except Exception as e:
-            self.logger.error(traceback.format_exc())
+            self.logger.error("Error publishing mipmap: {}".format(item.name),
+                              extra={
+                                  "action_show_more_info": {
+                                      "label": "Show Error",
+                                      "tooltip": "Show traceback",
+                                      "text": traceback.format_exc()
+                                  }
+                              }
+                              )
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
 
         self.logger.debug(
