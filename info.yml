@@ -15,6 +15,11 @@ configuration:
         description: Specify the name that should be used in menus and the main
                      publish dialog
 
+    display_host_name:
+        type: bool
+        default_value: false
+        description: "Display the host name in the window title, Set to False by default."
+
     display_action_name:
         type: str
         default_value: Publish
