@@ -38,8 +38,16 @@ def show_dialog(app):
     # defer imports so that the app works gracefully in batch modes
     from .dialog import AppDialog
     from .dialog import PRELOAD_SIGNALER
+    import socket
 
     display_name = sgtk.platform.current_bundle().get_setting("display_name")
+
+    display_host_name = sgtk.platform.current_bundle().get_setting("display_host_name")
+
+    if display_host_name:
+        # add host name for more info
+        host_name = socket.gethostname()
+        display_name = display_name + " ( on %s )" % host_name
 
     # start ui
     app.engine.show_dialog(display_name, app, AppDialog)
