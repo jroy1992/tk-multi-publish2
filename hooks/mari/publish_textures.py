@@ -15,9 +15,7 @@ import sgtk
 from sgtk import TankError
 from sgtk.util.filesystem import ensure_folder_exists, freeze_permissions
 
-HookBaseClass = sgtk.get_hook_baseclass()
-
-
+MARI_IMAGE_SAVE_OPTIONS_SETTING_NAME = "Mari Image Save Options"
 MARI_TEXTURES_ITEM_TYPE_SETTINGS = {
     "mari.channel": {
         "publish_type": "UDIM Image",
@@ -30,6 +28,9 @@ MARI_TEXTURES_ITEM_TYPE_SETTINGS = {
         "publish_path_template": None
     }
 }
+
+HookBaseClass = sgtk.get_hook_baseclass()
+
 
 class MariPublishTexturesPlugin(HookBaseClass):
     """
@@ -77,6 +78,15 @@ class MariPublishTexturesPlugin(HookBaseClass):
         schema = super(MariPublishTexturesPlugin, self).settings_schema
         schema["Item Type Filters"]["default_value"] = ["mari.channel", "mari.texture"]
         schema["Item Type Settings"]["default_value"] = MARI_TEXTURES_ITEM_TYPE_SETTINGS
+
+        # TODO: somehow ensure this isn't passed to MariPublishMipMapsPlugin?
+        schema[MARI_IMAGE_SAVE_OPTIONS_SETTING_NAME] = {
+            "type": "list",
+            "description": "Specify mari.Image.SaveOptions that need to be used while exporting textures",
+            "values": {"type": "str"},
+            "allows_empty": True,
+            "default_value": ["DEFAULT_OPTIONS"]
+        }
         return schema
 
 
@@ -115,6 +125,10 @@ class MariPublishTexturesPlugin(HookBaseClass):
                 error_msg = "Failed to find layer for channel: %s Validation failed." % layer_name
                 self.logger.error(error_msg)
                 return False
+
+        # validate and store the image save options setting
+        if not item.get_property("mari_image_save_options"):
+            item.local_properties["mari_image_save_options"] = self._get_image_save_options(task_settings)
 
         if item.get_property("uv_index_list") is None:
             return True
@@ -224,6 +238,8 @@ class MariPublishTexturesPlugin(HookBaseClass):
         # are appropriate for current os, no double separators, etc.
         path = sgtk.util.ShotgunPath.normalize(publish_path)
 
+        image_save_options = item.get_property("mari_image_save_options")
+
         try:
             # ensure the publish folder exists:
             publish_folder = os.path.dirname(path)
@@ -240,7 +256,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             if uv_index_list != []:
                 if layer_name:
                     layer = channel.findLayer(layer_name)
-                    layer.exportImages(path, UVIndexList=uv_index_list or [])
+                    layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
 
                 else:
                     # publish the entire channel, flattened
@@ -251,12 +267,12 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # with only a single layer would cause Mari to crash - this bug was not reproducible by
                         # us but happened 100% for the client!
                         layer = layers[0]
-                        layer.exportImages(path, UVIndexList=uv_index_list or [])
+                        layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
                         self._freeze_udim_permissions(path)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
-                        channel.exportImagesFlattened(path, UVIndexList=uv_index_list or [])
+                        channel.exportImagesFlattened(path, UVIndexList=uv_index_list or [], Options=image_save_options)
                         self._freeze_udim_permissions(path)
 
                     else:
@@ -274,6 +290,25 @@ class MariPublishTexturesPlugin(HookBaseClass):
 
         # TODO: return expanded list
         return [path]
+
+    def _get_image_save_options(self, task_settings):
+        """
+        Convert the values for mari.Image.SaveOptions obtained from "Mari Image Save Options"
+        as strings into mari constants and "or" the values so that they can be passed
+        to export functions
+        """
+        image_save_options = 0
+        save_options_str_list = task_settings[MARI_IMAGE_SAVE_OPTIONS_SETTING_NAME].value
+
+        for save_option in save_options_str_list:
+            try:
+                mari_option = getattr(mari.Image.SaveOptions, save_option)
+            except AttributeError:
+                raise TankError("No attribute '{}' found in 'mari.Image.SaveOptions'. "
+                                "Please check the setting '{}'".format(save_option, MARI_IMAGE_SAVE_OPTIONS_SETTING_NAME))
+            image_save_options = image_save_options | mari_option
+
+        return image_save_options
 
     def _reuse_udims(self, task_settings, item, publish_path):
         # this property should be created in validate

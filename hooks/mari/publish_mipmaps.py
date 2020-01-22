@@ -41,7 +41,7 @@ INPUT_PLUGIN_NAME = "Publish Textures"
 
 class MariPublishMipmapsPlugin(HookBaseClass):
     """
-    Inherits from PublishFilesPlugin
+    Inherits from MariPublishTexturesPlugin
     """
     @property
     def name(self):
@@ -106,7 +106,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         :param item: Item to process
         :returns: True if item is valid, False otherwise.
         """
-        # TODO: check if Publish Textures plugin was accepted and validated?
+        # TODO: check if Publish Textures plugin is turned on?
         # heavily dependent on that output
 
         if not super(MariPublishMipmapsPlugin, self).validate(task_settings, item):
