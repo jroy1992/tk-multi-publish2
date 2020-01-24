@@ -85,7 +85,12 @@ class CollectorPlugin(PluginBase):
             if value_type == "list":
                 num_values = len(set([tuple(l) for l in values]))
             elif value_type == "dict":
-                num_values = len(set([frozenset(d.items()) for d in values]))
+                # there can be a list within the dictionary too and frozenset errors out with non-hashable TypeError
+                # so we will assume two dicts are different if we encounter TypeError
+                try:
+                    num_values = len(set([frozenset(d.items()) for d in values]))
+                except TypeError:
+                    num_values = len(values)
             else:
                 num_values = len(set(values))
 
