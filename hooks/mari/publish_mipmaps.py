@@ -182,7 +182,9 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                 mipmap_paths.extend(self.create_mipmaps_for_seq(source_paths_expanded, target_path))
 
             # reuse the other UDIMs from previous publish
-            mipmap_paths.extend(self._reuse_udims(task_settings, item, publish_path))
+            mipmap_paths.extend(self._reuse_udims(task_settings, item, target_path))
+            self._freeze_udim_permissions(target_path)
+
         except Exception as e:
             self.logger.error("Error publishing mipmap: {}".format(item.name),
                               extra={
