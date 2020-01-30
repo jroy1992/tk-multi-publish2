@@ -268,18 +268,17 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # us but happened 100% for the client!
                         layer = layers[0]
                         layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
-                        self._freeze_udim_permissions(path)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
                         channel.exportImagesFlattened(path, UVIndexList=uv_index_list or [], Options=image_save_options)
-                        self._freeze_udim_permissions(path)
 
                     else:
                         self.logger.error("Channel '%s' doesn't appear to have any layers!" % channel.name())
 
             # after export is completed, try to reuse over the udims from previous publish
-            self._reuse_udims(task_settings, item, publish_path)
+            self._reuse_udims(task_settings, item, path)
+            self._freeze_udim_permissions(path)
 
         except Exception as e:
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
@@ -322,7 +321,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
         seal_files = item.properties.get("seal_files", False)
 
 
-        if task_settings["Copy Files"].value:
+        if item.properties.get("copy_files"):
             return publisher.util.copy_files(udim_reuse_path_list, publish_path,
                                              seal_files=seal_files, is_sequence=True)
         else:
