@@ -714,7 +714,7 @@ class BasicPathInfo(HookBaseClass):
         If the item has "sequence_paths" set, it will attempt to symlink all paths
         assuming they meet the required criteria.
         """
-        self.link_files(src_files, dest_path, is_sequence, symlink=True)
+        return self.link_files(src_files, dest_path, is_sequence, symlink=True)
 
 
     def hardlink_files(self, src_files, dest_path, is_sequence=False):
@@ -728,7 +728,7 @@ class BasicPathInfo(HookBaseClass):
         If the item has "is_sequence" set, it will attempt to link all paths
         assuming they meet the required criteria.
         """
-        self.link_files(src_files, dest_path, is_sequence, symlink=False)
+        return self.link_files(src_files, dest_path, is_sequence, symlink=False)
 
 
     def link_files(self, src_files, dest_path, is_sequence=False, symlink=True):
