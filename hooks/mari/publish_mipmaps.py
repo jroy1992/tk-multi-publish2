@@ -229,7 +229,9 @@ class MariPublishMipmapsPlugin(HookBaseClass):
                 target_path = target_seq_path
 
             if not self._create_mipmap(source_path, target_path):
-                self.logger.warning("Mipmap not created for: {}".format(target_path))
+                self.logger.warning("Mipmap not created for: {}. "
+                                    "Touching empty file.".format(target_path))
+                open(target_path, 'a').close()
             else:
                 mipmap_paths.append(target_path)
 
@@ -251,6 +253,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         _img_input = oiio.ImageBuf(source_path)
         _target_spec = oiio.ImageSpec(_img_input.spec())
         _target_spec.attribute("maketx:filtername", "lanczos3")
+        _target_spec.attribute("maketx:fixnan", "box3")
 
         return oiio.ImageBufAlgo.make_texture(oiio.MakeTxTexture, _img_input, target_path, _target_spec)
 
