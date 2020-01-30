@@ -229,6 +229,9 @@ class MariSessionCollector(HookBaseClass):
                 # Add selected uv_index_list
                 properties["uv_index_list"] = uv_index_list
 
+                # Pass copy_files to the other plugins
+                properties["copy_files"] = settings["Copy Files"].value
+
                 # textures should always contain UDIM or tag <UDIM>
                 properties["is_sequence"] = True
 
