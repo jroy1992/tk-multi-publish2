@@ -513,7 +513,7 @@ class AppDialog(QtGui.QWidget):
         """
         comments = self.ui.item_comments.toPlainText()
         # if this is the summary description...
-        if self._current_items is None:
+        if not self._current_items:
             if self._summary_comment != comments:
                 self._summary_comment = comments
 
@@ -528,14 +528,18 @@ class AppDialog(QtGui.QWidget):
 
             self.ui.item_comments._show_placeholder = self._summary_comment_multiple_values
 
-        # the "else" below means if this is a list publish items
+        # the "else" below means if this is a list of publish items
         else:
             for current_item in self._current_items:
                 # update the comment on all selected items.
                 current_item.description = comments
+                # update the comment on selected items' children as well, recursively
+                for item in current_item.descendants:
+                    item.description = comments
 
-            # <multiple values> placeholder text should not appear for individual items
-            self.ui.item_comments._show_placeholder = False
+            if len(self._current_items) == 1:
+                # <multiple values> placeholder text should not appear for individual items
+                self.ui.item_comments._show_placeholder = False
 
             # if at least one task has a comment that is different than the summary description, set
             # <multiple values> indicator to true
@@ -732,7 +736,7 @@ class AppDialog(QtGui.QWidget):
             self.ui.context_widget.show()
             # enabling context editing by default, this is handled down the line on_item_context_change
             # updated context only reflects in items that have context_change_allowed
-            # TODO: Should we disable editing? when any of the selection don't have context change allowed.
+            # TODO: Should we disable editing when any of the selection don't have context change allowed?
             self.ui.context_widget.enable_editing(True, context_label_text)
 
             # create summary for all items
@@ -849,7 +853,7 @@ class AppDialog(QtGui.QWidget):
             )
 
         self.ui.context_widget.show()
-        # TODO: Should we disable editing? when any of the items don't have context change allowed.
+        # TODO: Should we disable editing when any of the items don't have context change allowed?
         self.ui.context_widget.enable_editing(True, context_label_text)
 
         # create summary for all items
@@ -1488,7 +1492,7 @@ class AppDialog(QtGui.QWidget):
         # TODO: see todo below...
         # items_with_new_context = []
 
-        if self._current_items is None:
+        if not self._current_items:
             # this is the summary item - so update all items!
             for top_level_item in self._publish_manager.tree.root_item.children:
                 if top_level_item.context_change_allowed:
