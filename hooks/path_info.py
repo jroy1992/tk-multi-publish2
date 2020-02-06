@@ -706,6 +706,55 @@ class BasicPathInfo(HookBaseClass):
 
         return processed_files
 
+    def copy_folder(self, src_folders, dest_folder, seal_folder=False):
+        """
+        This method handles copying an item's folder(s) to a designated location.
+
+        """
+
+        publisher = self.parent
+
+        logger = publisher.logger
+
+        # ---- copy the src folders to the dest location
+        processed_folders = []
+        for src_folder in src_folders:
+
+            if not os.path.isdir(src_folder):
+                continue
+
+            # If the folder paths are the same, lock permissions
+            if src_folder == dest_folder:
+                filesystem.freeze_permissions(dest_folder)
+                continue
+
+            # copy the folder method
+            try:
+                filesystem.ensure_folder_exists(dest_folder)
+                filesystem.copy_folder(src_folder, dest_folder,
+                                       folder_permissions=stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+
+                if seal_folder:
+                    try:
+                        filesystem.seal_file(dest_folder)
+                    except Exception as e:
+                        # primary function is to copy. Do not raise exception if sealing fails.
+                        self.logger.warning("File '%s' could not be sealed, skipping: %s" % (dest_folder, e))
+                        self.logger.warning(traceback.format_exc())
+
+            except Exception as e:
+                raise Exception(
+                    "Failed to copy folder from '%s' to '%s'.\n%s" %
+                    (src_folder, dest_folder, traceback.format_exc())
+                )
+
+            logger.debug(
+                "Copied folder '%s' to '%s'." % (src_folder, dest_folder)
+            )
+            processed_folders.append(dest_folder)
+
+        return processed_folders
+
     def symlink_files(self, src_files, dest_path, is_sequence=False):
         """
         This method handles symlink an item's publish_path to publish_symlink_path,
