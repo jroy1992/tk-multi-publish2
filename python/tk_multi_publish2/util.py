@@ -202,6 +202,26 @@ def copy_files(src_files, dest_path, seal_files=False, is_sequence=False):
     )
 
 
+def copy_folder(src_folders, dest_folder, seal_folder=False):
+    """
+    This method handles copying an folder's path(s) to a designated location.
+
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "copy_folder",
+        src_folders=src_folders,
+        dest_folder=dest_folder,
+        seal_folder=seal_folder
+    )
+
+
 def symlink_files(src_files, dest_path, is_sequence=False):
     """
     This method handles symlink an item's publish_path to publish_symlink_path,
