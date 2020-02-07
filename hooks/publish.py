@@ -332,7 +332,8 @@ class PublishPlugin(HookBaseClass):
 
         # Note the name, context, and path *must* match the values supplied to
         # register_publish in the publish phase in order for this to return an
-        # accurate list of previous publishes of this file.
+        # accurate list of previous publishes of this file
+        # and publishes with higher version number.
         publishes = publisher.util.get_conflicting_publishes(
             item.context,
             item.get_property("publish_path"),
