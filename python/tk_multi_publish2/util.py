@@ -576,7 +576,8 @@ def get_version_number(path):
 def get_conflicting_publishes(context, path, publish_name, filters=None):
     """
     Returns a list of SG published file dicts for any existing publishes that
-    match the supplied context, path, and publish_name.
+    match the supplied context and publish_name, and match the path
+    or have a higher version number.
 
     :param context: The context to search publishes for
     :param path: The path to match against previous publishes
@@ -626,11 +627,12 @@ def get_conflicting_publishes(context, path, publish_name, filters=None):
     publishes = publisher.shotgun.find(
         "PublishedFile",
         publish_filters,
-        ["path"]
+        ["path", "version_number"]
     )
 
     # ensure the path is normalized for comparison
     normalized_path = sgtk.util.ShotgunPath.normalize(path)
+    current_version = get_version_number(normalized_path)
 
     # next, extract the publish path from each of the returned publishes and
     # compare it against the supplied path. if the paths match, we add the
@@ -640,6 +642,10 @@ def get_conflicting_publishes(context, path, publish_name, filters=None):
     for publish in publishes:
         publish_path = sgtk.util.resolve_publish_path(publisher.sgtk, publish)
         if publish_path:
+            if publish.get("version_number") > current_version:
+                matching_publishes.append(publish)
+                continue
+
             # ensure the published path is normalized for comparison
             normalized_publish_path = sgtk.util.ShotgunPath.normalize(
                 publish_path)
