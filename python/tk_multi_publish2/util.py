@@ -619,7 +619,7 @@ def get_conflicting_publishes(context, path, publish_name, filters=None):
 
     # now build up the filters to match against
     publish_filters = [filters] if filters else []
-    for field in ["code", "entity", "name", "project", "task"]:
+    for field in ["entity", "name", "project"]:
         publish_filters.append([field, "is", publish_data[field]])
     logger.debug("Build publish filters: %s" % (publish_filters,))
 
