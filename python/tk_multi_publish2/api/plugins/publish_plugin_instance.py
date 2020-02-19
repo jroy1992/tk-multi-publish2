@@ -33,12 +33,10 @@ class PublishPluginInstance(PluginInstanceBase):
         :param context: The Context to use to resolve this plugin's settings
         :param publish_logger: a logger object that will be used by the hook
         """
-        # all plugins need a hook and a name
-        self._name = name
-
         self._icon_pixmap = None
 
         super(PublishPluginInstance, self).__init__(
+            name,
             path,
             context,
             publish_logger
@@ -57,15 +55,9 @@ class PublishPluginInstance(PluginInstanceBase):
             base_class=bundle.base_hooks.PublishPlugin,
             plugin=self
         )
+        # hook.id = (path, self.name)
         hook.id = path
         return hook
-
-    @property
-    def name(self):
-        """
-        The name of this publish plugin instance
-        """
-        return self._name
 
     @property
     def plugin_name(self):

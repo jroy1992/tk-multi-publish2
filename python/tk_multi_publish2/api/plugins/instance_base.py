@@ -22,7 +22,7 @@ class PluginInstanceBase(object):
     Each object reflects an instance in the app configuration.
     """
 
-    def __init__(self, path, context, publish_logger):
+    def __init__(self, name, path, context, publish_logger):
         """
         Initialize a plugin instance.
 
@@ -39,7 +39,9 @@ class PluginInstanceBase(object):
         self._logger = publish_logger
 
         # all plugins need a hook and a name
+        self._name = name
         self._path = path
+        self._id = (self._name, self._path)
         self._context = context
 
         self._settings = {}
@@ -49,6 +51,17 @@ class PluginInstanceBase(object):
 
         # kick things off
         self._validate_and_resolve_config()
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def name(self):
+        """
+        The name of this publish plugin instance
+        """
+        return self._name
 
     def _create_hook_instance(self, path):
         """

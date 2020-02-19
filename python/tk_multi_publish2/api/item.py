@@ -1163,7 +1163,7 @@ class PublishItem(object):
                 (hook_object,)
             )
 
-        plugin_id = hook_object.id
+        plugin_id = hook_object.plugin.id
 
         return self._local_properties[plugin_id]
 
