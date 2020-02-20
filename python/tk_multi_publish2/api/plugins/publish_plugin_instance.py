@@ -55,7 +55,7 @@ class PublishPluginInstance(PluginInstanceBase):
             base_class=bundle.base_hooks.PublishPlugin,
             plugin=self
         )
-        # hook.id = (path, self.name)
+
         hook.id = path
         return hook
 
