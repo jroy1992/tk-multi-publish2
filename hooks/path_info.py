@@ -578,7 +578,7 @@ class BasicPathInfo(HookBaseClass):
         logger = publisher.logger
         logger.debug("Getting next version of path: %s ..." % (path,))
 
-        self.replace_version_in_path(path)
+        return self.replace_version_in_path(path)
 
     def get_next_version_info(self, path):
         """
