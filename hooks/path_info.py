@@ -492,38 +492,39 @@ class BasicPathInfo(HookBaseClass):
         logger.debug("Returning version path: %s" % (version_path,))
         return version_path
 
-    def get_next_version_path(self, path):
+    def replace_version_in_path(self, path, version=None):
         """
-        Given a file path, return a path to the next version.
-
-        This is typically used by auto-versioning logic in plugins that need to
-        save the current work file to the next version number.
+        Given a file path, return a path to the given version,
+        by replacing the currently present version in the path.
+        If no version is provided, return a path to the next version.
 
         If no version can be identified in the supplied path, ``None`` will be
         returned, indicating that the next version path can't be determined.
 
         :param path: The path to a file, likely one to be published.
 
-        :return: The path to the next version of the supplied path.
+        :return: The path to the given version of the supplied path.
         """
 
         publisher = self.parent
-
         logger = publisher.logger
-        logger.debug("Getting next version of path: %s ..." % (path,))
 
         # default
-        next_version_path = None
+        version_path = None
         path_template = self.sgtk.template_from_path(path)
 
         if path_template:
             # if the path fits a template, use that and increment the version field
             fields = path_template.get_fields(path)
             if "version" in fields:
-                fields["version"] = fields["version"] + 1
-                next_version_path = path_template.apply_fields(fields)
+                if version:
+                    fields["version"] = version
+                else:
+                    # if no explicit version is given, use the next version
+                    fields["version"] = fields["version"] + 1
+                version_path = path_template.apply_fields(fields)
 
-        if not next_version_path:
+        if not version_path:
             # fallback to regex matching
             # TODO: check entire path instead of just filename?
             path_info = publisher.util.get_file_path_components(path)
@@ -541,21 +542,43 @@ class BasicPathInfo(HookBaseClass):
                 # make sure we maintain the same padding
                 padding = len(version_str)
 
-                # bump the version number
-                next_version_number = int(version_str) + 1
+                if not version:
+                    # if no explicit version is given, use the next version
+                    version = int(version_str) + 1
 
                 # create a new version string filled with the appropriate 0 padding
-                next_version_str = "v%s" % (str(next_version_number).zfill(padding))
+                version_str = "v%s" % (str(version).zfill(padding))
 
-                new_filename = "%s%s%s" % (prefix, version_sep, next_version_str)
+                new_filename = "%s%s%s" % (prefix, version_sep, version_str)
                 if extension:
                     new_filename = "%s.%s" % (new_filename, extension)
 
                 # build the new path in the same folder
-                next_version_path = os.path.join(path_info["folder"], new_filename)
+                version_path = os.path.join(path_info["folder"], new_filename)
 
-        logger.debug("Returning next version path: %s" % (next_version_path,))
-        return next_version_path
+        logger.debug("Returning version path: %s" % (version_path,))
+        return version_path
+
+    def get_next_version_path(self, path):
+        """
+        Given a file path, return a path to the next version.
+
+        This is typically used by auto-versioning logic in plugins that need to
+        save the current work file to the next version number.
+
+        If no version can be identified in the supplied path, ``None`` will be
+        returned, indicating that the next version path can't be determined.
+
+        :param path: The path to a file, likely one to be published.
+
+        :return: The path to the next version of the supplied path.
+        """
+        publisher = self.parent
+
+        logger = publisher.logger
+        logger.debug("Getting next version of path: %s ..." % (path,))
+
+        self.replace_version_in_path(path)
 
     def get_next_version_info(self, path):
         """

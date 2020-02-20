@@ -116,6 +116,32 @@ def get_next_version_path(path):
         path=path
     )
 
+def replace_version_in_path(path, version):
+    """
+    Given a file path, return a path to the given version,
+    by replacing the currently present version in the path.
+    If no version is provided, return a path to the next version.
+
+    If no version can be identified in the supplied path, ``None`` will be
+    returned, indicating that the next version path can't be determined.
+
+    :param path: The path to a file, likely one to be published.
+
+    :return: The path to the given version of the supplied path.
+    """
+
+    # the logic for this method lives in a hook that can be overridden by
+    # clients. exposing the method here in the publish utils api prevents
+    # clients from having to call other hooks directly in their
+    # collector/publisher hook implementations.
+    publisher = sgtk.platform.current_bundle()
+    return publisher.execute_hook_method(
+        "path_info",
+        "replace_version_in_path",
+        path=path,
+        version=version
+    )
+
 
 def get_next_version_info(path):
     """
@@ -642,15 +668,16 @@ def get_conflicting_publishes(context, path, publish_name, filters=None):
     for publish in publishes:
         publish_path = sgtk.util.resolve_publish_path(publisher.sgtk, publish)
         if publish_path:
-            if publish.get("version_number") > current_version:
-                matching_publishes.append(publish)
-                continue
-
             # ensure the published path is normalized for comparison
             normalized_publish_path = sgtk.util.ShotgunPath.normalize(
                 publish_path)
             if normalized_path == normalized_publish_path:
                 matching_publishes.append(publish)
+            elif publish.get("version_number") > current_version:
+                possible_version_path = replace_version_in_path(normalized_path,
+                                                                publish["version_number"])
+                if possible_version_path == normalized_publish_path:
+                    matching_publishes.append(publish)
 
     return matching_publishes
 
