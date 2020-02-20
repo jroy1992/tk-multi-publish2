@@ -307,7 +307,7 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         key = None
         for plugin_item in publish_plugins:
             if plugin_item["name"] == INPUT_PLUGIN_NAME:
-                key = plugin_item["hook"].value
+                key = (INPUT_PLUGIN_NAME, plugin_item["hook"].value)
                 break
 
         if not key:
