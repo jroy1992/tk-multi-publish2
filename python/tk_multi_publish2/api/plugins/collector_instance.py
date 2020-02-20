@@ -26,6 +26,17 @@ class CollectorPluginInstance(PluginInstanceBase):
     Each collector plugin object reflects an instance in the app configuration.
     """
 
+    def __init__(self, path, context, publish_logger):
+        """
+        Initialize a plugin instance.
+
+        :param path: Path to the collector hook
+        :param context: The Context to use to resolve this plugin's settings
+        :param publish_logger: a logger object that will be used by the hook
+        """
+
+        super(CollectorPluginInstance, self).__init__("Collector", path, context, publish_logger)
+
     def _create_hook_instance(self, path):
         """
         Create the plugin's hook instance.
@@ -34,13 +45,13 @@ class CollectorPluginInstance(PluginInstanceBase):
         implementation.
         """
         bundle = sgtk.platform.current_bundle()
-        plugin = bundle.create_hook_instance(
+        hook = bundle.create_hook_instance(
             path,
             base_class=bundle.base_hooks.CollectorPlugin,
             plugin=self
         )
-        plugin.id = path
-        return plugin
+        hook.id = path
+        return hook
 
     def get_plugin_settings(self, context=None):
         """
