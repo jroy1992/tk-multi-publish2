@@ -334,20 +334,21 @@ class PublishPlugin(HookBaseClass):
         # register_publish in the publish phase in order for this to return an
         # accurate list of previous publishes of this file
         # and publishes with higher version number.
-        publishes = publisher.util.get_conflicting_publishes(
+        # cache out the conflicting publishes in a property, so it can be used by other hooks.
+        item.properties.conflicting_publishes = publisher.util.get_conflicting_publishes(
             item.context,
             item.get_property("publish_path"),
             item.get_property("publish_name"),
             filters=["sg_status_list", "is_not", None]
         )
 
-        if publishes:
+        if item.properties.conflicting_publishes:
             conflict_info = (
                 "Found the following conflicting publishes:<br>"
-                "<pre>%s</pre>" % (pprint.pformat(publishes),)
+                "<pre>%s</pre>" % (pprint.pformat(item.properties.conflicting_publishes),)
             )
             self.logger.error(
-                "Found %s conflicting publishes in Shotgun" % (len(publishes),),
+                "Found %s conflicting publishes in Shotgun" % (len(item.properties.conflicting_publishes),),
                 extra={
                     "action_show_more_info": {
                         "label": "Show Conflicts",
