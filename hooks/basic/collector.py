@@ -263,6 +263,15 @@ class FileCollectorPlugin(HookBaseClass):
                     "description": "Resolution order to follow when multiple item types"
                                    "are available the same extension, lower resolution order gets higher priority."
                                    "Item type with a matching work_path_template, gets priority of -1."
+                },
+                "ignore_sequences": {
+                    "type": "bool",
+                    "default_value": False,
+                    "allows_empty": True,
+                    "description": "Setting this to True will force the collected items of this type,"
+                                   " to be treated as single frame publishes."
+                                   "This is would enable item types to be configured to publish one single file, "
+                                   "Even if the collector, collects multiple files."
                 }
             }
         )
@@ -571,6 +580,8 @@ class FileCollectorPlugin(HookBaseClass):
         if not item_type:
             item_type = self._get_item_type_from_settings(settings, path, is_sequence)
 
+        type_info = self._get_item_type_info(settings, item_type)
+        ignore_sequence = type_info["ignore_sequences"]
         # Define the item's properties
         properties = properties or {}
 
@@ -578,6 +589,9 @@ class FileCollectorPlugin(HookBaseClass):
         properties["path"] = path
         properties["is_sequence"] = is_sequence
 
+        # item intentionally ignores sequences
+        if ignore_sequence:
+            properties["is_sequence"] = False
         # If a sequence, add the sequence path
         if is_sequence:
             properties["sequence_paths"] = seq_files
@@ -676,10 +690,13 @@ class FileCollectorPlugin(HookBaseClass):
                 # found the extension in the common types lookup.
                 common_type_found = True
 
+                ignore_sequences = type_info["ignore_sequences"]
                 # If we are dealing with a sequence, first check if we have a
                 # separate definition for a sequence of this type specifically,
                 # and if so, use that instead.
-                if is_sequence and not current_item_type.endswith(".sequence"):
+                # If an item intentionally ignores sequences, simply add the item_type without turning it to
+                # an item_type that resolves files as sequences.
+                if not ignore_sequences and is_sequence and not current_item_type.endswith(".sequence"):
                     tmp_type = "%s.%s" % (current_item_type, "sequence")
                     if tmp_type in settings["Item Types"].value:
                         template_item_type_mapping.append((matched_resolution_order, matched_work_path_template,
@@ -726,12 +743,16 @@ class FileCollectorPlugin(HookBaseClass):
 
                 item_type = "file.%s" % (category,)
 
+        type_info = self._get_item_type_info(settings, item_type)
+        ignore_sequences = type_info["ignore_sequences"]
         # if the supplied image path is part of a sequence. alter the
         # type info to account for this.
-        if is_sequence and not item_type.endswith(".sequence"):
+        # If an item intentionally ignores sequences, simply add the item_type without turning it to
+        # an item_type that resolves files as sequences.
+        if not ignore_sequences and is_sequence and not item_type.endswith(".sequence"):
             item_type = "%s.%s" % (item_type, "sequence")
 
-        return item_type
+        return str(item_type)
 
 
     def _get_item_type_info(self, settings, item_type):
@@ -893,6 +914,9 @@ class FileCollectorPlugin(HookBaseClass):
             # Force use of %d format
             if item.properties.get("is_sequence", False):
                 fields["SEQ"] = "FORMAT: %d"
+            else:
+                # make sure we update the SEQ key in case of non-sequence to None
+                fields["SEQ"] = None
 
         return fields
 
