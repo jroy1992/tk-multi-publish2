@@ -268,7 +268,8 @@ class FileCollectorPlugin(HookBaseClass):
                     "type": "bool",
                     "default_value": False,
                     "allows_empty": True,
-                    "description": "Setting that ignores file sequences intentionally."
+                    "description": "Setting this to True will force the collected items of this type,"
+                                   " to be treated as single frame publishes."
                                    "This is would enable item types to be configured to publish one single file, "
                                    "Even if the collector, collects multiple files."
                 }
