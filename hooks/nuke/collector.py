@@ -10,6 +10,9 @@
 
 import copy
 import os
+import tempfile
+import traceback
+
 import nuke
 import sgtk
 from sgtk import TankError
@@ -275,14 +278,12 @@ class NukeSessionCollector(HookBaseClass):
 
                     # Get the file path and sequence files from the node itself
                     file_path = self.__write_node_app.get_node_render_path(node)
-                    thumbnail = self.__write_node_app.generate_node_thumbnail(node)
 
                 else:
                     # evaluate the output path parameter which may include frame
                     # expressions/format
                     param_name = _NUKE_OUTPUTS[node_type]
                     file_path = node[param_name].evaluate()
-                    thumbnail = None
 
 
                 # Collect the item if we have a file_path defined
@@ -302,6 +303,12 @@ class NukeSessionCollector(HookBaseClass):
                     # Store a reference to the originating node
                     item.properties.node = node
 
+                    thumbnail = self._generate_thumbnail_from_rendered_image(file_path)
+                    if not thumbnail and node_type in SG_WRITE_NODE_CLASSES:
+                        # if OpenImageIO is unable to convert an existing render,
+                        # fall back to using writenode app to render it
+                        thumbnail = self.__write_node_app.generate_node_thumbnail(node)
+
                     if thumbnail:
                         item.set_thumbnail_from_path(thumbnail)
 
@@ -309,6 +316,53 @@ class NukeSessionCollector(HookBaseClass):
                     items.append(item)
 
         return items
+
+    def _generate_thumbnail_from_rendered_image(self, file_path):
+        publisher = self.parent
+
+        current_in = nuke.root()["first_frame"].value()
+        current_out = nuke.root()["last_frame"].value()
+        frame_to_use = (current_out - current_in) / 2 + current_in
+        frame_to_use = int(frame_to_use)
+
+        source_path = publisher.util.get_path_for_frame(file_path, frame_to_use)
+        if not os.path.exists(source_path):
+            return None
+
+        png_path = tempfile.NamedTemporaryFile(suffix=".png", prefix="tanktmp", delete=False).name
+
+        try:
+            import OpenImageIO as oiio
+
+            img_buffer = oiio.ImageBuf(source_path)
+            if img_buffer.write(png_path):
+                return png_path
+            else:
+                self.logger.error(
+                    "Error converting image to thumbnail",
+                    extra={
+                        "action_show_more_info": {
+                            "label": "Show Info",
+                            "tooltip": "Show more info",
+                            "text": "Error converting %s to png for thumbnail.\n"
+                                    "OpenImageIO returned False." % (source_path)
+                        }
+                    }
+                )
+        except Exception:
+            self.logger.error(
+                "Error converting image to thumbnail",
+                extra={
+                    "action_show_more_info": {
+                        "label": "Show Info",
+                        "tooltip": "Show more info",
+                        "text": "Error converting %s to png for thumbnail.\n%s"
+                                % (source_path, traceback.format_exc())
+                    }
+                }
+            )
+
+        return None
 
 
     def collect_work_files(self, settings, parent_item, work_template):
