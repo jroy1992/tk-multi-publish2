@@ -250,8 +250,6 @@ class NukeSessionCollector(HookBaseClass):
         """
         items = []
 
-        publisher = self.parent
-
         # iterate over all the known output types
         for node_type in _NUKE_OUTPUTS:
 
@@ -259,61 +257,79 @@ class NukeSessionCollector(HookBaseClass):
             all_nodes_of_type = [n for n in nuke.allNodes()
                 if n.Class() == node_type]
 
-            # iterate over each instance
-            for node in all_nodes_of_type:
+            items.extend(self.collect_node_outputs_from_list(settings, parent_item,
+                                                             all_nodes_of_type, node_type))
 
-                # Skip the node if its disabled
-                if node["disable"].value():
+        return items
+
+    def collect_node_outputs_from_list(self, settings, parent_item, node_list, node_type):
+        """
+        Given a list of nodes of a certain nuke node class,
+        see if they reference files that have been written to disk.
+
+        :param dict settings: Configured settings for this collector
+        :param parent_item: The parent item for any nodes collected
+        :param node_list: List of nodes to be processed
+        :param node_type: Nuke node class name for the given node list
+        """
+        items = []
+
+        # iterate over each instance
+        for node in node_list:
+
+            # Skip the node if its disabled
+            if node["disable"].value():
+                continue
+
+            self.logger.info(
+                "Processing %s node: %s" % (node_type, node.name()))
+
+            if node_type in SG_WRITE_NODE_CLASSES:
+
+                if not self.__write_node_app:
+                    self.logger.error("Unable to process node '%s' without "
+                            "the tk-nuke_writenode app!" % node.name())
                     continue
 
-                self.logger.info(
-                    "Processing %s node: %s" % (node_type, node.name()))
+                # Get the file path and sequence files from the node itself
+                file_path = self.__write_node_app.get_node_render_path(node)
+                thumbnail = self.__write_node_app.generate_node_thumbnail(node)
 
-                if node_type in SG_WRITE_NODE_CLASSES:
-
-                    if not self.__write_node_app:
-                        self.logger.error("Unable to process node '%s' without "
-                                "the tk-nuke_writenode app!" % node.name())
-                        continue
-
-                    # Get the file path and sequence files from the node itself
-                    file_path = self.__write_node_app.get_node_render_path(node)
-
-                else:
-                    # evaluate the output path parameter which may include frame
-                    # expressions/format
-                    param_name = _NUKE_OUTPUTS[node_type]
-                    file_path = node[param_name].evaluate()
+            else:
+                # evaluate the output path parameter which may include frame
+                # expressions/format
+                param_name = _NUKE_OUTPUTS[node_type]
+                file_path = node[param_name].evaluate()
 
 
-                # Collect the item if we have a file_path defined
-                if file_path:
+            # Collect the item if we have a file_path defined
+            if file_path:
 
-                    # Call the parent _collect_file method
-                    item = self._collect_file(settings, parent_item, file_path)
-                    if not item:
-                        continue
+                # Call the parent _collect_file method
+                item = self._collect_file(settings, parent_item, file_path)
+                if not item:
+                    continue
 
-                    # the item has been created. update the display name to include
-                    # the nuke node to make it clear to the user how it was
-                    # collected within the current session. also, prepend nukesession
-                    # to the item type so we can process it by the nuke-specific publish
-                    item.name = "%s (%s)" % (node.Class(), node.name())
+                # the item has been created. update the display name to include
+                # the nuke node to make it clear to the user how it was
+                # collected within the current session. also, prepend nukesession
+                # to the item type so we can process it by the nuke-specific publish
+                item.name = "%s (%s)" % (node.Class(), node.name())
 
-                    # Store a reference to the originating node
-                    item.properties.node = node
+                # Store a reference to the originating node
+                item.properties.node = node
+    
+                thumbnail = self._generate_thumbnail_from_rendered_image(file_path)
+                if not thumbnail and node_type in SG_WRITE_NODE_CLASSES:
+                    # if OpenImageIO is unable to convert an existing render,
+                    # fall back to using writenode app to render it
+                    thumbnail = self.__write_node_app.generate_node_thumbnail(node)
 
-                    thumbnail = self._generate_thumbnail_from_rendered_image(file_path)
-                    if not thumbnail and node_type in SG_WRITE_NODE_CLASSES:
-                        # if OpenImageIO is unable to convert an existing render,
-                        # fall back to using writenode app to render it
-                        thumbnail = self.__write_node_app.generate_node_thumbnail(node)
+                if thumbnail:
+                    item.set_thumbnail_from_path(thumbnail)
 
-                    if thumbnail:
-                        item.set_thumbnail_from_path(thumbnail)
-
-                    # Add item to the list
-                    items.append(item)
+                # Add item to the list
+                items.append(item)
 
         return items
 
