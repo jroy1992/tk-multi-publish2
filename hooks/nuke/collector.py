@@ -293,7 +293,6 @@ class NukeSessionCollector(HookBaseClass):
 
                 # Get the file path and sequence files from the node itself
                 file_path = self.__write_node_app.get_node_render_path(node)
-                thumbnail = self.__write_node_app.generate_node_thumbnail(node)
 
             else:
                 # evaluate the output path parameter which may include frame
