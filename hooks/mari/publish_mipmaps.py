@@ -313,6 +313,5 @@ class MariPublishMipmapsPlugin(HookBaseClass):
         if not key:
             raise TankError("Publish Mipmaps needs the output of {} to run".format(INPUT_PLUGIN_NAME))
 
-        publish_path_texture = item._local_properties.get(key).get(
-            "publish_path")
+        publish_path_texture = item._local_properties.get(key, {}).get("publish_path")
         return [publish_path_texture]
