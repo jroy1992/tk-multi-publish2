@@ -256,7 +256,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
             if uv_index_list != []:
                 if layer_name:
                     layer = channel.findLayer(layer_name)
-                    layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
+                    self.export_layer(layer, path, uv_index_list, image_save_options)
 
                 else:
                     # publish the entire channel, flattened
@@ -267,7 +267,7 @@ class MariPublishTexturesPlugin(HookBaseClass):
                         # with only a single layer would cause Mari to crash - this bug was not reproducible by
                         # us but happened 100% for the client!
                         layer = layers[0]
-                        layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
+                        self.export_layer(layer, path, uv_index_list, image_save_options)
 
                     elif len(layers) > 1:
                         # publish the flattened layer:
@@ -281,6 +281,17 @@ class MariPublishTexturesPlugin(HookBaseClass):
             self._freeze_udim_permissions(path)
 
         except Exception as e:
+            import traceback
+            self.logger.error("Failed to publish file for item '%s'" % (item.name),
+                              extra={
+                                  "action_show_more_info": {
+                                      "label": "Show Error",
+                                      "tooltip": "Show Traceback",
+                                      "text": traceback.format_exc()
+                                  }
+                              }
+                              )
+
             raise TankError("Failed to publish file for item '%s': %s" % (item.name, str(e)))
 
         self.logger.debug(
@@ -308,6 +319,17 @@ class MariPublishTexturesPlugin(HookBaseClass):
             image_save_options = image_save_options | mari_option
 
         return image_save_options
+
+    def export_layer(self, layer, path, uv_index_list, image_save_options):
+        if layer.isGroupLayer():
+            layer.layerStack().exportImagesFlattened(path, UVIndexList=uv_index_list or [],
+                                                     Options=image_save_options)
+        elif layer.isPaintableLayer():
+            layer.exportImages(path, UVIndexList=uv_index_list or [], Options=image_save_options)
+        else:
+            # just export the channel, to be safe
+            layer.groupStack().exportImagesFlattened(path, UVIndexList=uv_index_list or [],
+                                                   Options=image_save_options)
 
     def _reuse_udims(self, task_settings, item, publish_path):
         # this property should be created in validate
