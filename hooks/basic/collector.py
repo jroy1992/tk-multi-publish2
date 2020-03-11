@@ -283,7 +283,6 @@ class FileCollectorPlugin(HookBaseClass):
         }
         return schema
 
-
     def process_current_session(self, settings, parent_item):
         """
         Analyzes the current scene open in a DCC and parents a subtree of items
@@ -294,7 +293,6 @@ class FileCollectorPlugin(HookBaseClass):
         """
         # default implementation does not do anything
         return []
-
 
     def process_file(self, settings, parent_item, path):
         """
@@ -316,7 +314,6 @@ class FileCollectorPlugin(HookBaseClass):
             item = self._collect_file(settings, parent_item, path)
             return [item] if item else []
 
-
     def on_context_changed(self, settings, item):
         """
         Callback to update the item on context changes.
@@ -328,7 +325,6 @@ class FileCollectorPlugin(HookBaseClass):
         item.properties.work_path_template = self._resolve_work_path_template(settings, item)
 
         super(FileCollectorPlugin, self).on_context_changed(settings, item)
-
 
     ############################################################################
     # protected helper methods
@@ -381,7 +377,6 @@ class FileCollectorPlugin(HookBaseClass):
 
         return matched_work_path_template
 
-
     def _resolve_work_path_template(self, settings, item):
         """
         Resolve work_path_template from the collector settings for the specified item.
@@ -395,7 +390,6 @@ class FileCollectorPlugin(HookBaseClass):
             return None
 
         return self._get_work_path_template_from_settings(settings, item.type, path)
-
 
     def _get_item_context_from_path(self, work_path_template, path, parent_item, default_entities=list()):
         """
@@ -424,7 +418,6 @@ class FileCollectorPlugin(HookBaseClass):
             return new_context
         else:
             return parent_item.context
-
 
     def _collect_file(self, settings, parent_item, path):
         """
@@ -505,7 +498,6 @@ class FileCollectorPlugin(HookBaseClass):
 
         return file_item
 
-
     def _collect_folder(self, settings, parent_item, folder):
         """
         Process the supplied folder path.
@@ -522,7 +514,8 @@ class FileCollectorPlugin(HookBaseClass):
         folder = sgtk.util.ShotgunPath.normalize(folder)
 
         publisher = self.parent
-        frame_sequences = publisher.util.get_frame_sequences(folder, KNOWN_SEQ_EXTENSIONS)
+        known_seq_extensions = _build_seq_extensions_list(settings)
+        frame_sequences = publisher.util.get_frame_sequences(folder, known_seq_extensions)
 
         file_items = []
         for path, seq_files in frame_sequences:
@@ -551,7 +544,6 @@ class FileCollectorPlugin(HookBaseClass):
             self.logger.warning("No file sequences found in: %s" % (folder,))
 
         return file_items
-
 
     def _add_file_item(self, settings, parent_item, path, is_sequence=False, seq_files=None,
                        item_name=None, item_type=None, context=None, properties=None):
@@ -627,7 +619,6 @@ class FileCollectorPlugin(HookBaseClass):
             file_item.thumbnail_enabled = False
 
         return file_item
-
 
     def _get_item_type_from_settings(self, settings, path, is_sequence):
         """
@@ -754,7 +745,6 @@ class FileCollectorPlugin(HookBaseClass):
 
         return str(item_type)
 
-
     def _get_item_type_info(self, settings, item_type):
         """
         Return the dictionary corresponding to this item's 'Item Types' settings.
@@ -776,6 +766,10 @@ class FileCollectorPlugin(HookBaseClass):
         publisher = self.parent
 
         item_info = super(FileCollectorPlugin, self)._get_item_type_info(settings, item_type)
+
+        # define default values for the schema
+        item_info.setdefault("resolution_order", 0)
+        item_info.setdefault("ignore_sequences", False)
 
         # If this is a file item...
         if item_type.startswith("file."):
@@ -800,7 +794,6 @@ class FileCollectorPlugin(HookBaseClass):
 
         # everything should now be populated, so return the dictionary
         return item_info
-
 
     def _get_template_fields_from_path(self, item, template_name, path):
         """
@@ -842,7 +835,6 @@ class FileCollectorPlugin(HookBaseClass):
         )
         return {}
 
-
     def _resolve_item_fields(self, settings, item):
         """
         Helper method used to get fields that might not normally be defined in the context.
@@ -880,7 +872,8 @@ class FileCollectorPlugin(HookBaseClass):
 
             # If not already populated, attempt to get the width and height from the image
             # use extensions instead of item types
-            if file_info["extension"] in KNOWN_SEQ_EXTENSIONS:
+            known_seq_extensions = _build_seq_extensions_list(settings)
+            if file_info["extension"] in known_seq_extensions:
                 if "width" not in fields or "height" not in fields:
                     # If image, use OIIO to introspect file and get WxH
                     try:
@@ -921,22 +914,27 @@ class FileCollectorPlugin(HookBaseClass):
         return fields
 
 
-def _build_seq_extensions_list():
+def _build_seq_extensions_list(settings):
 
     file_types = ["file.%s" % x for x in KNOWN_IMAGE_TYPES]
     extensions = set()
-
+    defined_file_types = settings['Item Types'].keys()
+    # get defined_file_type based on file_types
     for file_type in file_types:
-        extensions.update(DEFAULT_ITEM_TYPES[file_type]["extensions"])
-
+        for defined_file_type in defined_file_types:
+            if defined_file_type.startswith(file_type):
+                extensions.update(settings['Item Types'][defined_file_type]["extensions"].value)
+                extensions.update(e_item.upper() for e_item in settings['Item Types'][defined_file_type]["extensions"].value)
+                break
     # get all the image mime type extensions as well
     mimetypes.init()
     types_map = mimetypes.types_map
     for (ext, mimetype) in types_map.iteritems():
         if mimetype.startswith("image/"):
             extensions.add(ext.lstrip("."))
+            extensions.add(ext.lstrip(".").upper())
 
     return list(extensions)
 
+
 KNOWN_IMAGE_TYPES = ("render", "texture", "image", "deep_render")
-KNOWN_SEQ_EXTENSIONS = _build_seq_extensions_list()
