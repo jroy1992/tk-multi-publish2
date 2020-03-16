@@ -216,8 +216,8 @@ class MariSessionCollector(HookBaseClass):
                 found_layers = self._find_layers_r(channel.layerList())
                 if not found_layers:
                     # no layers to publish!
-                    self.logger.warning("Channel '%s' has no layers. The channel will not be collected" % channel_name)
-                    continue
+                    self.logger.warning("Channel '%s' has no paintable or procedural layers. "
+                                        "Collecting it anyway." % channel_name)
 
                 # Define the item's properties
                 properties = {}
