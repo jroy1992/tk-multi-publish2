@@ -419,14 +419,14 @@ class FileCollectorPlugin(HookBaseClass):
         else:
             return parent_item.context
 
-    def _collect_file(self, settings, parent_item, path):
+    def _collect_file(self, settings, parent_item, path, creation_properties=None):
         """
         Process the supplied file path.
 
         :param dict settings: Configured settings for this collector
         :param parent_item: parent item instance
         :param path: Path to analyze
-        :param frame_sequence: Treat the path as a part of a sequence
+        :param creation_properties: The dict of initial properties for the item
 
         :returns: The item that was created
         """
@@ -470,7 +470,8 @@ class FileCollectorPlugin(HookBaseClass):
                 )
                 return
 
-        file_item = self._add_file_item(settings, parent_item, path, is_sequence, seq_files)
+        file_item = self._add_file_item(settings, parent_item, path, is_sequence, seq_files,
+                                        creation_properties=creation_properties)
         if file_item:
             if is_sequence:
                 # include an indicator that this is an image sequence and the known
@@ -498,13 +499,14 @@ class FileCollectorPlugin(HookBaseClass):
 
         return file_item
 
-    def _collect_folder(self, settings, parent_item, folder):
+    def _collect_folder(self, settings, parent_item, folder, creation_properties=None):
         """
         Process the supplied folder path.
 
         :param dict settings: Configured settings for this collector
         :param parent_item: parent item instance
         :param folder: Path to analyze
+        :param creation_properties: The dict of initial properties for the item
 
         :returns: The item that was created
         """
@@ -519,7 +521,8 @@ class FileCollectorPlugin(HookBaseClass):
 
         file_items = []
         for path, seq_files in frame_sequences:
-            file_item = self._add_file_item(settings, parent_item, path, True, seq_files)
+            file_item = self._add_file_item(settings, parent_item, path, True, seq_files,
+                                            creation_properties=creation_properties)
             if file_item:
                 # include an indicator that this is an image sequence and the known
                 # file that belongs to this sequence
@@ -545,8 +548,8 @@ class FileCollectorPlugin(HookBaseClass):
 
         return file_items
 
-    def _add_file_item(self, settings, parent_item, path, is_sequence=False, seq_files=None,
-                       item_name=None, item_type=None, context=None, properties=None):
+    def _add_file_item(self, settings, parent_item, path, is_sequence=False, seq_files=None, item_name=None,
+                       item_type=None, context=None, creation_properties=None):
         """
         Creates a file item
 
@@ -558,7 +561,7 @@ class FileCollectorPlugin(HookBaseClass):
         :param item_name: The name of the item instance
         :param item_type: The type of the item instance
         :param context: The :class:`sgtk.Context` to set for the item
-        :param properties: The dict of initial properties for the item
+        :param creation_properties: The dict of initial properties for the item
 
         :returns: The item that was created
         """
@@ -568,18 +571,21 @@ class FileCollectorPlugin(HookBaseClass):
         if not item_name:
             item_name = publisher.util.get_publish_name(path)
 
-        # Lookup this item's item_type from the settings object
-        if not item_type:
-            item_type = self._get_item_type_from_settings(settings, path, is_sequence)
-
-        type_info = self._get_item_type_info(settings, item_type)
-        ignore_sequence = type_info["ignore_sequences"]
         # Define the item's properties
-        properties = properties or {}
+        properties = creation_properties or {}
 
         # set the path and is_sequence properties for the plugins to use
         properties["path"] = path
         properties["is_sequence"] = is_sequence
+
+        # Lookup this item's item_type from the settings object
+        if not item_type:
+            # use the properties dict here, in case user doesn't use the creation_properties arg
+            item_type = self._get_item_type_from_settings(settings, path, is_sequence,
+                                                          creation_properties=properties)
+
+        type_info = self._get_item_type_info(settings, item_type)
+        ignore_sequence = type_info["ignore_sequences"]
 
         # item intentionally ignores sequences
         if ignore_sequence:
@@ -620,22 +626,16 @@ class FileCollectorPlugin(HookBaseClass):
 
         return file_item
 
-    def _get_item_type_from_settings(self, settings, path, is_sequence):
-        """
-        Return the item type for the given filename from the settings object.
+    def _get_filtered_item_types_from_settings(self, settings, path, is_sequence, creation_properties):
 
-        The method will try to identify the file as a common file type. If not,
-        it will use the mimetype category. If the file still cannot be
-        identified, it will fallback to a generic file type.
+        """
+        Returns a list of tuples containing (resolution_order, work_path_template, item_type).
+        This filtered list of item types can then be passed down to resolve the correct item_type.
 
         :param dict settings: Configured settings for this collector
         :param path: The file path to identify type info for
         :param is_sequence: Bool whether or not path is a sequence path
-
-        :return: A string representing the item_type::
-
-        The item type will be of the form `file.<type>` where type is a specific
-        common type or a generic classification of the file.
+        :param creation_properties: The dict of initial properties for the item
         """
         publisher = self.parent
 
@@ -643,12 +643,6 @@ class FileCollectorPlugin(HookBaseClass):
         file_info = publisher.util.get_file_path_components(path)
         extension = file_info["extension"]
         filename = file_info["filename"]
-
-        # default values used if no specific type can be determined
-        item_type = "file.unknown"
-
-        # keep track if a common type was identified for the extension
-        common_type_found = False
 
         # tuple of resolution_order, work_path_template and item_type
         template_item_type_mapping = list()
@@ -678,9 +672,6 @@ class FileCollectorPlugin(HookBaseClass):
                             # we have a match! update the work_path_template
                             matched_work_path_template = template.name
 
-                # found the extension in the common types lookup.
-                common_type_found = True
-
                 ignore_sequences = type_info["ignore_sequences"]
                 # If we are dealing with a sequence, first check if we have a
                 # separate definition for a sequence of this type specifically,
@@ -697,13 +688,58 @@ class FileCollectorPlugin(HookBaseClass):
                 template_item_type_mapping.append((matched_resolution_order, matched_work_path_template,
                                                    current_item_type))
 
+                max_resolution_order = max(
+                    [resolution_order for resolution_order, work_path_template, item_type in template_item_type_mapping]
+                )
+
                 # sort the list on resolution_order, giving preference to a matching template
-                template_item_type_mapping.sort(key=lambda elem: elem[0] if not elem[1] else -1)
+                template_item_type_mapping.sort(
+                    key=lambda elem: elem[0] if not elem[1] else elem[0]-max_resolution_order)
+
+        return template_item_type_mapping
+
+    def _get_item_type_from_settings(self, settings, path, is_sequence, creation_properties):
+        """
+        Return the item type for the given filename from the settings object.
+
+        The method will try to identify the file as a common file type. If not,
+        it will use the mimetype category. If the file still cannot be
+        identified, it will fallback to a generic file type.
+
+        :param dict settings: Configured settings for this collector
+        :param path: The file path to identify type info for
+        :param is_sequence: Bool whether or not path is a sequence path
+        :param creation_properties: The dict of initial properties for the item
+
+        :return: A string representing the item_type::
+
+        The item type will be of the form `file.<type>` where type is a specific
+        common type or a generic classification of the file.
+        """
+        publisher = self.parent
+
+        # extract the components of the supplied path
+        file_info = publisher.util.get_file_path_components(path)
+        extension = file_info["extension"]
+        filename = file_info["filename"]
+
+        # default values used if no specific type can be determined
+        item_type = "file.unknown"
+
+        # keep track if a common type was identified for the extension
+        common_type_found = False
+
+        # tuple of resolution_order, work_path_template and item_type
+        template_item_type_mapping = self._get_filtered_item_types_from_settings(settings, path,
+                                                                                 is_sequence, creation_properties)
 
         # this should work fine in case there is no work path template defined too
         # this method gives preference to the first match that we get for any template
         # also, there should never be a match with more than one templates, since template_from_path will fail too.
         if len(template_item_type_mapping):
+            # found the extension in the item types lookup.
+            common_type_found = True
+
             resolution_order, work_path_template, item_type = template_item_type_mapping[0]
             # 0 index contains a matching work_path_template if any.
             # if there is no match that means we need to ask the user
