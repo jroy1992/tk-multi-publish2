@@ -688,9 +688,10 @@ class FileCollectorPlugin(HookBaseClass):
                 template_item_type_mapping.append((matched_resolution_order, matched_work_path_template,
                                                    current_item_type))
 
-        max_resolution_order = max(
-            [resolution_order for resolution_order, work_path_template, item_type in template_item_type_mapping]
-        )
+        resolution_order_list = [
+            resolution_order for resolution_order, work_path_template, item_type in template_item_type_mapping
+        ]
+        max_resolution_order = max(resolution_order_list) if resolution_order_list else 0
 
         # sort the list on resolution_order, giving preference to a matching template
         template_item_type_mapping.sort(
