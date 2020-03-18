@@ -81,7 +81,7 @@ class CollectorPlugin(PluginBase):
             values.sort(reverse=True)
 
             # Get the number of unique values
-            value_type = kwargs.pop("type", type(values[0]).__name__)
+            value_type = kwargs.pop("type", type(values[0]).__name__ if len(values) else "nothing")
             if value_type == "list":
                 num_values = len(set([tuple(l) for l in values]))
             elif value_type == "dict":
