@@ -266,13 +266,13 @@ class CollectorPlugin(PluginBase):
                 field_type = "str"
                 if value_type != field_type:
                     if value_type == "str":
-                        field_value = convert_string_to_type(field_value, field_type)
-                        # Need to replace the field widget for this guy, so do a
-                        # full refresh
+                        field_value = convert_string_to_type(field_value, value_type)
+                        # We don't need full refresh in case of property widgets
+                        # since these operate individually
                         do_full_refresh = True
                     else:
                         raise TypeError(
-                            "Unknown conversion from type '{}'' to '{}'".format(
+                            "Unknown conversion from type '{}' to '{}'".format(
                                 value_type, field_type))
 
             # If this is coming from a linked property, we need to update
@@ -299,8 +299,8 @@ class CollectorPlugin(PluginBase):
             self.value_changed.emit()
 
             # Update the ui
-            if do_full_refresh:
-                self.refresh_ui()
+            # if do_full_refresh:
+            #     self.refresh_ui()
 
         def gather_fields(self):
             """
@@ -350,9 +350,10 @@ class CollectorPlugin(PluginBase):
             self._field_widgets = {}
             for key, value in self._fields.iteritems():
                 # Create the field widget
+                # Let it automatically figure out value widget type
                 field_widget = self.value_widget_factory(
-                    key, value, "str",
-                    any([re.match(pattern, key) for pattern in self._editable_fields]))
+                    key, value, value_type=None,
+                    editable=any([re.match(pattern, key) for pattern in self._editable_fields]))
                 field_widget.setObjectName(key)
                 field_widget.setParent(self)
 
